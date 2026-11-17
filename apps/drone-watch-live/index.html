@@ -371,8 +371,11 @@ function snapshot(t){const el=source.el,sx=source.w/PW,sy=source.h/PH,s=Math.max
 function addEvent(t,now){events.unshift({id:t.id,time:new Date().toLocaleTimeString(),auto:"drone",label:"drone",conf:t.pD,img:snapshot(t),box:boxNorm(t),wing:t.flapHz});if(events.length>60)events.pop();renderEvents()}
 function boxNorm(t){return[t.x/PW,t.y/PH,Math.max(t.w,3)/PW,Math.max(t.h,3)/PH].map(v=>+v.toFixed(5))}
 function renderEvents(){
-  $("events").innerHTML=events.map((e,i)=>`<li><img src="${e.img}" alt="Snapshot of object ${e.id}"><div><div class="mono">${esc(e.time)} · #${e.id} · ${Math.round(e.conf*100)}%${e.frame?" · frame":""}</div><div>${e.frame?`${e.frame.length} object(s) in frame`:`Auto: <b>${esc(e.auto)}</b>`}</div>
-    ${e.frame?"":`<div class="lbls">${["drone","bird","other","false alarm"].map(l=>`<button type="button" data-ev="${i}" data-l="${l}" aria-pressed="${e.label===l}">${l}</button>`).join("")}</div>`}</div></li>`).join("")||`<li style="display:block;color:var(--muted)">Drone alerts and saved frames appear here.</li>`;
+  $("events").innerHTML=events.map((e,i)=>{
+    const src=/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(e.img)?e.img:"";
+    return `<li><img src="${src}" alt="Snapshot of object ${esc(e.id)}"><div><div class="mono">${esc(e.time)} · #${esc(e.id)} · ${Math.round(e.conf*100)}%${e.frame?" · frame":""}</div><div>${e.frame?`${e.frame.length} object(s) in frame`:`Auto: <b>${esc(e.auto)}</b>`}</div>
+    ${e.frame?"":`<div class="lbls">${["drone","bird","other","false alarm"].map(l=>`<button type="button" data-ev="${i}" data-l="${l}" aria-pressed="${e.label===l}">${l}</button>`).join("")}</div>`}</div></li>`;
+  }).join("")||`<li style="display:block;color:var(--muted)">Drone alerts and saved frames appear here.</li>`;
 }
 $("events").addEventListener("click",e=>{const b=e.target.closest("button[data-ev]");if(!b)return;events[+b.dataset.ev].label=b.dataset.l;renderEvents()});
 $("btnSnap").onclick=()=>{if(!source)return;const c=document.createElement("canvas");const sc=Math.min(1,1280/source.w);c.width=Math.round(source.w*sc);c.height=Math.round(source.h*sc);c.getContext("2d").drawImage(source.el,0,0,c.width,c.height);

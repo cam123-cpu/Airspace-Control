@@ -103,9 +103,13 @@
     return v;
   };
 
-  /** Classify a 32x32 grayscale crop (array-like of 1024 values, 0..255). */
+  /** Classify a 32x32 grayscale crop (array-like of 1024 values, 0..255).
+   *  A short crop or a non-finite pixel throws. Callers must not turn that into evidence. */
   pixelModel.classify = function (gray) {
     if (!this.model) throw new Error("pixelModel: call load() first");
+    const need = this.model.size * this.model.size;
+    if (!gray || gray.length !== need) throw new Error("pixelModel: crop length");
+    for (let i = 0; i < need; i++) if (!isFinite(gray[i])) throw new Error("pixelModel: non-finite pixel");
     let h = this.features(gray);
     for (const L of this.model.layers) {
       const z = new Float64Array(L.nout);
@@ -125,7 +129,11 @@
     const p = new Array(h.length);
     for (let j = 0; j < h.length; j++) { p[j] = Math.exp(h[j] / T - mx); s += p[j]; }
     let cls = 0;
-    for (let j = 0; j < p.length; j++) { p[j] /= s; if (p[j] > p[cls]) cls = j; }
+    for (let j = 0; j < p.length; j++) {
+      p[j] /= s;
+      if (!isFinite(p[j])) throw new Error("pixelModel: non-finite probability");
+      if (p[j] > p[cls]) cls = j;
+    }
     return { probs: p, cls, label: CLASSES[cls], conf: p[cls] };
   };
 
