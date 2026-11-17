@@ -2,7 +2,7 @@
 #   pip-compile --generate-hashes  and install with  pip install --require-hashes -r requirements.lock
 starlette==1.7.0
 uvicorn==0.54.0
-pydantic==2.13.5
+pydantic==2.14.3
 pydantic-core==2.46.5
 PyJWT==2.15.0
 cryptography==50.0.1
