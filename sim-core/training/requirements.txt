@@ -11,4 +11,4 @@ pyyaml>=6.0.1
 requests>=2.32
 awscli>=1.33
 huggingface_hub>=0.24
-pytest>=8
+pytest>=9.2.0
