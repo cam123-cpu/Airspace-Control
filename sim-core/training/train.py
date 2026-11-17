@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -93,6 +94,8 @@ def run(cfg: dict, project: Path) -> None:
         print(f"warning: ultralytics {ultralytics.__version__} installed, pipeline tested against {ULTRALYTICS_VERSION}",
               file=sys.stderr)
     name = cfg["name"]
+    # Ultralytics .pt files are pickles. This process is the one training them.
+    os.environ["AIRSPACE_ALLOW_PICKLE_WEIGHTS"] = "1"
     model = YOLO(cfg["model"])
     if str(cfg["model"]).endswith(".yaml") and cfg.get("pretrained"):
         model = model.load(cfg["pretrained"])  # transfer matching layers into the custom architecture

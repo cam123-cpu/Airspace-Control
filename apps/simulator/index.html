@@ -578,6 +578,7 @@ function fusionTick(t){
     let acm=false;
     if(UI.ac)for(const a of W.acDets){if(dist2(a.n,tr.p)<320&&angDiff(azOf(a.n,tr.p),a.b)<30){acm=true;break}}
     tr.eAc=acm?Math.min(1.5,tr.eAc+0.75):tr.eAc*0.9;tr.srcA=tr.eAc>0.4;
+    if(!Number.isFinite(tr.eCam))tr.eCam=0; // one bad frame must not stick; NaN would never decay
     if(t-tr.camLast>3)tr.eCam*=0.985;
     tr.srcC=Math.abs(tr.eCam)>0.8;
     // radar micro-Doppler: rotor blade flash vs wingbeat (signature simulated from the true object; weak below ~20 dB SNR)
@@ -625,14 +626,22 @@ function chooseCue(t){
     if(!cur||best.id!==cur.id){c.cue=best.id;c.cueSince=t;c.lock=false;c.misses=0;if(best.p_>0.3)addLog(t,`Camera slews to ${best.id}.`,"")}
   }
 }
+function pixelNetOn(){return !!(window.pixelModel&&pixelModel.model&&UI.pixel!==false)}
 function camStep(h,t){
   const c=W.cam;const tr=c.cue&&W.tracks.find(x=>x.id===c.cue);
   let tAz,tEl,tFov;
   if(tr&&UI.cam){
     let p=predict(tr,t);
-    if(c.lock&&tr.truth&&tr.truth.alive){const q=tr.truth.pos;p=[p[0]*0.1+q[0]*0.9,p[1]*0.1+q[1]*0.9,p[2]*0.1+q[2]*0.9]} // visual lock: video tracker holds the target
+    // The stand-in classifier is allowed to stick the turret to the true object. The trained net is not:
+    // it has to look where the track says the target is.
+    if(c.lock&&tr.truth&&tr.truth.alive&&!pixelNetOn()){const q=tr.truth.pos;p=[p[0]*0.1+q[0]*0.9,p[1]*0.1+q[1]*0.9,p[2]*0.1+q[2]*0.9]}
     const d=[p[0]-PTZv[0],p[1]-PTZv[1],p[2]-PTZv[2]],rg=Math.sqrt(d[0]**2+d[1]**2+d[2]**2);
-    tAz=(Math.atan2(d[0],d[1])*R2D+360)%360;tEl=Math.asin(d[2]/rg)*R2D;tFov=clamp(2*Math.atan((c.lock?3.5:14)/rg)*R2D,0.5,30) /* wide while acquiring, tight once the video tracker has it */;c.range=rg;
+    tAz=(Math.atan2(d[0],d[1])*R2D+360)%360;tEl=Math.asin(d[2]/rg)*R2D;
+    // Wide while searching. Tighten only while a real detection holds the lock, or for a brief
+    // settled look. An empty look sets holdUntil so the turret zooms back out instead of staring
+    // at a patch of sky the size of the airframe.
+    const tight=pixelNetOn()?(c.lock||(c.rate<8&&!(c.holdUntil>t))):c.lock;
+    tFov=clamp(2*Math.atan((tight?3.5:14)/rg)*R2D,0.5,30);c.range=rg;
   }else{c.scanAz=(c.scanAz+8*h)%360;tAz=c.scanAz;tEl=9;tFov=40;c.range=0}
   const da=clamp(wrap180(tAz-c.az),-45*h,45*h);c.az=(c.az+da+360)%360;
   c.el+=clamp(tEl-c.el,-30*h,30*h);
@@ -651,7 +660,16 @@ function visibility(e){
 function classifyStep(t){
   const c=W.cam;c.det=null;if(!UI.cam)return;
   const tr=c.cue&&W.tracks.find(x=>x.id===c.cue);if(!tr)return;
-  const B=camBasis(c),tgt=tr.truth;
+  const B=camBasis(c);
+  if(pixelNetOn()){
+    if(c.rate>12){c.lock=false;return} // slewing: the frame is blurred, so it is not evidence
+    const pred=predict(tr,t),pr=proj(B,pred);
+    if(!pr||pr[0]<0||pr[0]>=CW||pr[1]<0||pr[1]>=CH){c.lock=false;return}
+    const px=0.45*B.foc/Math.max(1,pr[2]); // nominal small-drone span; the true size is not an input
+    W.pendingCls={trId:tr.id,px,t};
+    return;
+  }
+  const tgt=tr.truth;
   let inF=false,px=0;
   if(tgt){const pr=proj(B,tgt.pos);if(pr&&pr[0]>=0&&pr[0]<CW&&pr[1]>=0&&pr[1]<CH){inF=true;px=tgt.span*B.foc/pr[2]}}
   if(!inF){if(!tgt&&c.rate<5){tr.eCam=Math.max(-5,tr.eCam-0.15);tr.camLooks++;tr.camLast=t}c.lock=false;return}
@@ -661,7 +679,6 @@ function classifyStep(t){
   const pdet=phys.pDetect*(c.rate>20?0.3:1);
   if(RNG()>pdet){if(++c.misses>2)c.lock=false;return}
   c.lock=true;c.misses=0;
-  if(W.renderLive&&window.pixelModel&&pixelModel.model&&UI.pixel!==false){W.pendingCls={trId:tr.id,ent:tgt,px,t};return} // real pixel inference happens in drawCam
   const trueCls=tgt.type==="drone"?"drone":tgt.type==="bird"?"bird":"other";
   const acc=Math.min(0.985,0.5+0.48*phys.pRecognize);
   let out=trueCls;if(RNG()>acc){out=trueCls==="drone"?(RNG()<0.7?"bird":"other"):trueCls==="bird"?(RNG()<0.7?"drone":"other"):(RNG()<0.5?"bird":"drone")}
@@ -1520,13 +1537,13 @@ function drawCam(){
   for(let x=-ox;x<CW;x+=256)for(let y=-oy;y<CH;y+=256)cctx.drawImage(noiseC,x,y);
   cctx.globalCompositeOperation="source-over";cctx.globalAlpha=1;
   const vg=cctx.createRadialGradient(CW/2,CH/2,CH*0.35,CW/2,CH/2,CH*0.85);vg.addColorStop(0,"rgba(0,0,0,0)");vg.addColorStop(1,"rgba(0,0,0,.55)");cctx.fillStyle=vg;cctx.fillRect(0,0,CW,CH);
-  runPixelModel(B);
+  runPixelModel();
   // auto-labels (ground truth from the simulator)
   W.labels=labels.map(l=>({...l,x0:clamp(l.x0,0,CW),y0:clamp(l.y0,0,CH),x1:clamp(l.x1,0,CW),y1:clamp(l.y1,0,CH)})).filter(l=>l.x1-l.x0>0.5&&l.y1-l.y0>0.5);
   if(UI.labels){cctx.setLineDash([3,3]);cctx.lineWidth=1;cctx.font="10px "+css("--mono");for(const l of W.labels){cctx.strokeStyle="rgba(255,255,255,.7)";cctx.strokeRect(l.x0,l.y0,l.x1-l.x0,l.y1-l.y0);cctx.fillStyle="rgba(255,255,255,.8)";cctx.fillText(l.name,l.x0,l.y1+11)}cctx.setLineDash([])}
   // detector output
   const d=cm.det;
-  if(d&&d.ent){const p=proj(B,d.ent.pos);if(p){const hw=Math.max(9,d.px*0.75),col=d.cls==="drone"?"#ff5b52":d.cls==="bird"?"#6fd39a":"#f0a93b";cctx.strokeStyle=col;cctx.lineWidth=2;cctx.strokeRect(p[0]-hw,p[1]-hw,hw*2,hw*2+(d.payload?hw*0.8:0));
+  if(d&&(d.bore||d.ent)){const p=d.bore?[CW/2,CH/2]:proj(B,d.ent.pos);if(p){const hw=Math.max(9,d.px*0.75),col=d.cls==="drone"?"#ff5b52":d.cls==="bird"?"#6fd39a":"#f0a93b";cctx.strokeStyle=col;cctx.lineWidth=2;cctx.strokeRect(p[0]-hw,p[1]-hw,hw*2,hw*2+(d.payload?hw*0.8:0));
     cctx.fillStyle=col;cctx.font="600 12px "+css("--mono");cctx.fillText(`${d.cls.toUpperCase()} ${d.conf.toFixed(2)}${d.payload?" + PAYLOAD":""}`,p[0]-hw,p[1]-hw-5)}}
   // HUD
   cctx.strokeStyle="rgba(220,240,250,.55)";cctx.lineWidth=1;const cx=CW/2,cy=CH/2;
@@ -1575,17 +1592,29 @@ function drawEnt(c,B,e,p,th,t){
   if(e.type==="car"&&p[2]<2500){c.fillStyle=th?"#9a9a9a":"#fff1c0";c.fillRect(sx-1,sy-1,2,2);return null}
   return null;
 }
-// Camera classifier: a trained network (MLP on edge features, 32x32 crops) runs on the rendered, noisy frame.
-// Trained only on this simulator's frames (89.6% held-out); real cameras need the GPU-trained model.
-function runPixelModel(B){
+// Camera classifier: MLP on a 32x32 crop of the boresight, after noise and vignette, before the HUD.
+// The crop is the center of the frame the turret is pointing at, never the simulator's true target.
+// Two measured limits: under 16 px the same net calls empty sky a drone at probability 0.999, and a
+// radar track is typically 10 m off, so an empty tight crop is a miss, not evidence the track is a bird.
+function runPixelModel(){
   const pc=W.pendingCls;if(!pc)return;W.pendingCls=null;
-  const tr=W.tracks.find(x=>x.id===pc.trId);if(!tr)return;const p=proj(B,pc.ent.pos);if(!p)return;
-  let out;try{out=pixelModel.classify(pixelModel.cropFromCanvas(cctx,p[0],p[1],pixelModel.cropSize(pc.px)))}catch(e){return}
-  const pr=out.probs,pD=clamp(pr[0]+pr[1],0.01,0.99),pB=pr[2];
-  const llr=Math.log(pD/(1-pD));tr.eCam=clamp(tr.eCam+0.3*llr,-5,4.5);tr.camLooks++;tr.camLast=W.t;
-  const cls=pD>0.5?"drone":pB>pr[3]?"bird":"other",payload=pD>0.5&&pr[1]>pr[0];
-  if(payload&&!tr.payload){tr.payload=true;addLog(W.t,`Camera: ${tr.id} is carrying a package.`,"warn")}
-  W.cam.det={trId:tr.id,cls,conf:cls==="drone"?pD:Math.max(pB,pr[3]),payload,ent:pc.ent,px:pc.px,model:true};
+  const tr=W.tracks.find(x=>x.id===pc.trId);if(!tr)return;
+  const c=W.cam;
+  if(!Number.isFinite(tr.eCam))tr.eCam=0;
+  let out;
+  try{out=pixelModel.classify(pixelModel.cropFromCanvas(cctx,CW/2,CH/2,pixelModel.cropSize(pc.px)))}
+  catch(e){c.faults=(c.faults||0)+1;c.lock=false;if(c.faults===1)addLog(W.t,"Camera classifier fault; this frame adds no evidence.","");return}
+  const pr=out.probs;
+  if(!pr||pr.some(x=>!Number.isFinite(x))){c.faults=(c.faults||0)+1;c.lock=false;return}
+  const pD=clamp(pr[0]+pr[1],0.08,0.92),pB=pr[2];
+  const cls=pD>0.5?"drone":pB>pr[3]?"bird":"other";
+  c.det={trId:tr.id,cls,conf:cls==="drone"?pD:Math.max(pB,pr[3]),payload:false,px:pc.px,model:true,bore:true};
+  if(!(pc.px>=16)||cls==="other"){c.lock=false;c.holdUntil=W.t+1.2;return}
+  const gain=0.3*Math.min(1,pc.px/24);
+  tr.eCam=clamp(tr.eCam+gain*Math.log(pD/(1-pD)),-5,4.5);tr.camLooks++;tr.camLast=W.t;
+  const payload=cls==="drone"&&pr[1]>pr[0];
+  if(payload&&!tr.payload){tr.payload=true;c.det.payload=true;addLog(W.t,`Camera: ${tr.id} is carrying a package.`,"warn")}
+  c.lock=true;
 }
 function yoloText(){if(!W.labels.length)return"(no labelled objects in this frame)";return W.labels.map(l=>`${l.cls} ${((l.x0+l.x1)/2/CW).toFixed(5)} ${((l.y0+l.y1)/2/CH).toFixed(5)} ${((l.x1-l.x0)/CW).toFixed(5)} ${((l.y1-l.y0)/CH).toFixed(5)}   # ${l.name}`).join("\n")}
 
@@ -1602,7 +1631,7 @@ function updatePanels(){
   const card=$("alertCard");
   if(!top||top.threat==="TRACK"){
     card.className="card alert";
-    card.innerHTML=`<h2>Threat status <span class="pill CLEAR">NO ALERT</span></h2><div class="big">Airspace clear</div><dl class="kv"><dt>Tracking</dt><dd>${vis.length} objects (${birds} classified as birds)</dd><dt>Camera</dt><dd>${W.cam.cue?"inspecting "+W.cam.cue:"search scan"}</dd><dt>RF emitters</dt><dd>${Object.keys(W.emitters).length||"none heard"}</dd>${Object.values(W.emitters).some(e=>e.spoof)?`<dt>Integrity</dt><dd style="color:var(--warn)">Remote ID spoof detected and ignored</dd>`:""}</dl>`;
+    card.innerHTML=`<h2>Threat status <span class="pill CLEAR">NO ALERT</span></h2><div class="big">Airspace clear</div><dl class="kv"><dt>Tracking</dt><dd>${vis.length} objects (${birds} classified as birds)</dd><dt>Camera</dt><dd>${W.cam.cue?"inspecting "+esc(W.cam.cue):"search scan"}</dd><dt>RF emitters</dt><dd>${Object.keys(W.emitters).length||"none heard"}</dd>${Object.values(W.emitters).some(e=>e.spoof)?`<dt>Integrity</dt><dd style="color:var(--warn)">Remote ID spoof detected and ignored</dd>`:""}</dl>`;
   }else{
     const tr=top,em=tr.emitter&&W.emitters[tr.emitter];const dF=distToFence(tr.p);const hd=(Math.round(Math.atan2(tr.v[0],tr.v[1])*R2D)+360)%360;
     card.className="card alert lvl-"+tr.threat;
@@ -1613,7 +1642,7 @@ function updatePanels(){
       <dl class="kv"><dt>Confidence</dt><dd>${Math.round(tr.p_*100)}% drone</dd><dt>Position</dt><dd>${dF<1?"inside fence":Math.round(dF)+" m outside fence"} · ${Math.round(tr.p[2])} m alt</dd><dt>Motion</dt><dd>${tr.hsE.toFixed(1)} m/s heading ${hd}°${tr.hover>2?" · hovering":""}</dd>
       <dt>Drop zone</dt><dd>${tr.drop?(tr.drop.mode==="hovering"?"under the hover point (±15 m)":`ETA ${Math.round(tr.drop.eta)} s · ±${Math.round(tr.drop.r)} m`):"not yet predictable"}</dd>
       <dt>Pilot</dt><dd>${em&&em.est?`${em.est.src}, ${Math.round(distToFence([em.est.x,em.est.y]))} m out · ±${Math.round(em.est.r)} m`:em?"RF bearings only (need both sensors)":"no RF link heard"}</dd></dl>
-      <div class="action">${action}</div>`;
+      <div class="action">${esc(action)}</div>`;
   }
   // sensor health
   {const em=Object.values(W.emitters);const rows=[["Radar",UI.radar,UI.radar?(UI.clutter>7?"degraded: heavy clutter":`${W.radarPlots.filter(r=>W.t-r.t<0.6).length} plots/scan`):"OFFLINE"],
