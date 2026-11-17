@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+# Data and outputs (regenerable)
+sim-core/data/
+sim-core/results/*.json
+sim-core/results/*.png
+ml/browser-model/cache/
+*.log
+# Databases and secrets
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+platform/pentest/state.json
+platform/pentest/evidence_store/
+# Vendored runtime (fetched by fetch_vendor.sh)
+apps/drone-watch-live/vendor/
+# Models and media
+*.onnx
+*.pt
+*.mp4
+*.y4m
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,29 @@
+# Visible-band detector. Small, distant targets: high input resolution, P2 head option,
+# no vertical flips (sky is up), no rotation (horizon matters), strong photometric aug.
+name: rgb
+data: /data/mix_rgb/data.yaml          # from build_mix.py --modality rgb
+model: yolo11s.pt                      # alternatives: yolo11m.pt (more accurate), yolov8s-p2.yaml (P2 head for <16 px targets)
+pretrained: yolo11s.pt                 # used as the starting weights when `model` is a .yaml architecture
+epochs: 150
+patience: 30
+imgsz: 1280
+batch: -1                              # auto-fit GPU memory
+optimizer: auto
+cos_lr: true
+close_mosaic: 15
+mosaic: 1.0
+mixup: 0.05
+copy_paste: 0.0
+scale: 0.5
+translate: 0.1
+degrees: 0.0
+flipud: 0.0
+fliplr: 0.5
+hsv_h: 0.015
+hsv_s: 0.6
+hsv_v: 0.5
+workers: 8
+seed: 0
+cache: false
+eval_tile: 0                           # set to e.g. 1280 if test frames are 4K (Det-Fly) and were not tiled
+export: {format: onnx, opset: 17, simplify: true, dynamic: false, half: false}

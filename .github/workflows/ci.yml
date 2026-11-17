@@ -1,0 +1,66 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  platform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults: { run: { working-directory: platform } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13", cache: pip, cache-dependency-path: platform/requirements-dev.txt }
+      - run: pip install -r requirements-dev.txt
+      - name: Unit and integration tests (includes SQL-safety scan and fuzzing)
+        run: python -m pytest -q
+      - name: Pen-test regression suite (fails if any fixed finding reproduces)
+        run: bash pentest/run_all.sh
+  postgres-rls:
+    # Proves tenant isolation in the database itself (row-level security), independent of application code.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults: { run: { working-directory: platform } }
+    env:
+      AIRSPACE_PG_DSN: postgresql://postgres:postgres@localhost:5432/postgres
+      AIRSPACE_PG_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13", cache: pip, cache-dependency-path: platform/requirements-dev.txt }
+      - run: pip install -r requirements-dev.txt "psycopg[binary]==3.2.3"
+      - name: Row-level security tests (fail instead of skip if the database is missing)
+        run: python -m pytest -q -rs tests/test_postgres_rls.py
+  sim-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults: { run: { working-directory: sim-core } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13", cache: pip, cache-dependency-path: sim-core/requirements.txt }
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Sensor physics calibration tests
+        run: node apps/simulator/sensors2.test.js

@@ -1,0 +1,20 @@
+# Local/staging composition. Production: managed Postgres (RLS on), KMS-backed secrets, gateway with mTLS in front.
+services:
+  api:
+    build: { context: .., dockerfile: ops/Dockerfile }
+    read_only: true                      # immutable root filesystem
+    tmpfs: ["/tmp:size=16m,noexec,nosuid"]
+    volumes: ["airspace-data:/data"]
+    env_file: ../.env                    # copy from .env.example; never commit .env
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    mem_limit: 512m
+    pids_limit: 256
+    ports: ["127.0.0.1:8080:8080"]       # only the gateway should reach it
+    healthcheck: { test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/healthz')"], interval: 30s }
+  # postgres:                            # target datastore (see ARCHITECTURE.md §3, §11): enable RLS policies per table
+  #   image: postgres:17@sha256:<pin>
+  #   environment: { POSTGRES_PASSWORD_FILE: /run/secrets/pg_password }
+  #   secrets: [pg_password]
+volumes:
+  airspace-data: {}

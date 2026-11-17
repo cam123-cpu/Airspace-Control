@@ -1,0 +1,10 @@
+# Security headers for static hosts that read _headers (Netlify, Cloudflare Pages).
+# GitHub Pages ignores this file; there the page's own CSP meta tag and HTTPS redirect still apply.
+/*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin

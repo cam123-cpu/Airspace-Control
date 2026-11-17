@@ -1,0 +1,10 @@
+.env
+*.db
+*.db-*
+evidence_store/
+__pycache__/
+*.datakey
+pentest/*.out
+pentest/state.json
+pentest/evidence_store/
+.pytest_cache/

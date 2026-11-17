@@ -1,0 +1,40 @@
+# Publishes the two web apps over HTTPS (needed for phone cameras).
+# Settings → Pages → Source: GitHub Actions. Private repos need a plan that supports Pages.
+name: Deploy web apps to Pages
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["apps/**"]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency: { group: pages, cancel-in-progress: true }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Vendor ONNX Runtime Web (npm integrity-checked)
+        run: bash apps/drone-watch-live/fetch_vendor.sh
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r apps/simulator _site/simulator
+          cp -r apps/drone-watch-live _site/live
+          rm -f _site/*/_headers
+          rm -f _site/simulator/sensors2.test.js
+          cat > _site/index.html <<'HTML'
+          <!doctype html><meta charset="utf-8"><title>Airspace Control</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+          <style>body{font:16px system-ui;background:#0a0f14;color:#d5e1ea;display:grid;place-items:center;height:100vh;margin:0}a{color:#4cc2d8;display:block;margin:8px 0;font-size:20px}</style>
+          <main><h1>Airspace Control</h1><a href="simulator/">Prison Airspace Sim</a><a href="live/">Drone Watch Live</a></main>
+          HTML
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,50 @@
+{
+  "format": "Mirrors SCEN in the browser sim (index.html): site ENU metres, origin at yard centre, fence x ±200, y ±150; times are seconds after run start. New keys: decoy, hoverPoint, rid_spoofs, rf_decoys, denial, expected_flags.",
+  "scenarios": {
+    "rt_ghost_rid": {
+      "name": "Red team: ghost Remote ID + dark drone",
+      "birds": 14, "kestrels": 1,
+      "drones": [
+        {"name": "A", "launch": 40, "pilot": [1362, 640], "rf": "none", "rid": false, "lights": false,
+         "cruise": 60, "hoverAlt": 24, "drop": [40, -30], "hoverDur": 15, "speed": 11}
+      ],
+      "rid_spoofs": [
+        {"serial": "RID-SPOOF-1", "tx": [-650, -700, 1.5], "op": [-900, 400], "win": [10, 200],
+         "path": [[10, -700, -500, 70], [80, -40, 10, 60], [85, -40, 10, 35], [125, -40, 10, 35], [200, -400, -800, 70]]}
+      ],
+      "expected_flags": ["rid_spoof (DF bearings point at the ground transmitter, not the claimed drone)", "rid_no_radar_return"],
+      "what_to_watch": "v1 dispatches the yard team to a drone that does not exist and is late on the real one; hardened ignores the ghost, flags the spoofer's location and alerts on drone A."
+    },
+    "rt_decoy_saturation": {
+      "name": "Red team: three decoys soak up the camera, two dark drones drop",
+      "birds": 18, "kestrels": 1,
+      "drones": [
+        {"name": "D1", "decoy": true, "launch": 5, "pilot": [-300, -1158], "rf": "link", "rid": false, "lights": true,
+         "loiter": {"centre": [-120, -420], "radius": 60, "alt": 60, "dur": 240}, "cruise": 70, "speed": 10},
+        {"name": "D2", "decoy": true, "launch": 8, "pilot": [200, -1158], "rf": "link", "rid": false, "lights": true,
+         "loiter": {"centre": [150, -380], "radius": 70, "alt": 55, "dur": 240}, "cruise": 70, "speed": 10},
+        {"name": "D3", "decoy": true, "launch": 12, "pilot": [700, -1158], "rf": "link", "rid": false, "lights": true,
+         "loiter": {"centre": [380, -300], "radius": 50, "alt": 70, "dur": 240}, "cruise": 70, "speed": 10},
+        {"name": "A", "launch": 35, "pilot": [-600, 1300], "rf": "none", "rid": false, "lights": false,
+         "cruise": 80, "hoverAlt": 26, "drop": [-60, 60], "hoverDur": 14, "speed": 13},
+        {"name": "B", "launch": 42, "pilot": [-560, 1330], "rf": "none", "rid": false, "lights": false,
+         "cruise": 75, "hoverAlt": 30, "drop": [70, 20], "hoverDur": 12, "speed": 13}
+      ],
+      "expected_flags": [],
+      "what_to_watch": "Camera round-robin by urgency (closing on the fence, hovering) instead of first-come; formation evidence links A and B once one is alerted."
+    },
+    "rt_tether_clone": {
+      "name": "Red team: tether drop from outside the fence + cloned controller",
+      "birds": 12, "kestrels": 1,
+      "drones": [
+        {"name": "A", "launch": 15, "pilot": [-420, 1250], "rf": "link", "rid": false, "lights": false,
+         "cruise": 70, "hoverAlt": 40, "hoverPoint": [-60, 185], "drop": [-60, 142], "hoverDur": 25, "speed": 12}
+      ],
+      "rf_decoys": [
+        {"pos": [900, 1100, 1.5], "mimic": "ctrl", "clone_of": "A", "win": [0, 480]}
+      ],
+      "expected_flags": ["controller_signal_two_sources (two pilot candidates)"],
+      "what_to_watch": "The drone never crosses the fence: hardened predicts the drop just inside the fence from the outside hover, and reports both controller locations instead of a blended, wrong one."
+    }
+  }
+}

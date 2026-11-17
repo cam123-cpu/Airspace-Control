@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest==9.1.1
+requests==2.34.2
+# CI-only security tooling (not installable in the build sandbox; run in CI):
+# bandit, semgrep, pip-audit, cyclonedx-bom

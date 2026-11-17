@@ -1,0 +1,338 @@
+# Dataset catalog for the counter-drone camera model.
+# Researched and checked against each dataset's own page / paper / repo on 2026-11-16.
+#
+# commercial_ok values
+#   yes                  license verified on the source page and it permits commercial use
+#   no                   source page restricts use to research / non-commercial
+#   unclear              no dataset license found, only a code/paper license, or the images
+#                        themselves came from third parties (YouTube, Google Images) -> ask a lawyer
+#                        or the authors before shipping a model trained on it
+#   permission_required  the provider's terms forbid this use unless you get written permission
+#
+# access values
+#   direct      fetch.py can download it unattended (public API / bucket, checksums when published)
+#   manual      links exist (Google Drive, Baidu, ModelScope, Kaggle, repo README) but need a human
+#   request     you must email / sign an agreement first
+#   unavailable access is on hold
+#
+# "verified" lists what was confirmed on the source; anything else in the entry is marked
+# "unverified" and the converter fails loudly if the files don't match.
+#
+# Classes map into the 4 training classes: drone, drone_payload, bird, other.
+
+version: 1
+checked: "2026-11-16"
+classes: [drone, drone_payload, bird, other]
+
+datasets:
+
+  - id: aot
+    name: Airborne Object Tracking (Amazon Prime Air / AWS Open Data)
+    url: https://registry.opendata.aws/airborne-object-tracking/
+    docs: https://www.aicrowd.com/challenges/airborne-object-tracking-challenge
+    modality: [gray]            # 8-bit grayscale PNG, 2448x2048
+    size: "4,943 flight sequences (~120 s @ 10 Hz), 5.9M+ images, 3.3M+ 2D boxes"
+    contexts: [air-to-air, sky, horizon, varied weather]
+    annotation_format: "groundtruth.json per part (converter: aot_json; schema unverified, see DATASET.md)"
+    license: CDLA-Permissive-1.0
+    commercial_ok: "yes"
+    access: direct
+    fetch: {method: s3, bucket: "s3://airborne-obj-detection-challenge-training/", region: us-east-1, no_sign_request: true}
+    converter: aot_json
+    verified: [license, bucket, counts, image format]
+    notes: "Very large. Use fetch.py --max-sequences to take a slice. Targets are tiny: use --tile in build_mix."
+
+  - id: usc_drone
+    name: USC Drone Dataset (MCL)
+    url: https://mcl.usc.edu/?p=10642
+    mirrors: [https://github.com/chelicynly/A-Deep-Learning-Approach-to-Drone-Monitoring, https://huggingface.co/datasets/uscmcl/MCL_drone_dataset]
+    modality: [rgb]
+    size: "30 clips x ~1 min, 1920x1080 @ 15 fps; labels on every 15th frame"
+    contexts: [outdoor, campus, sky]
+    annotation_format: "x_center y_center width height in pixels (converter: rect_txt --center)"
+    license: "USC copyright notice: permission to use, copy, modify, merge, publish, distribute and sell, keep notice; AS IS"
+    commercial_ok: "yes"
+    access: direct
+    fetch: {method: huggingface, repo: uscmcl/MCL_drone_dataset}
+    converter: rect_txt
+    verified: [license text, size, label convention]
+    notes: "Keep the USC copyright notice with any redistributed copy. Cite Wang et al., APSIPA 2019."
+
+  - id: dut_anti_uav
+    name: DUT Anti-UAV (detection + tracking)
+    url: https://github.com/wangdongdut/DUT-Anti-UAV
+    modality: [rgb]
+    size: "detection 10,000 images (5,200/2,600/2,200); tracking 20 sequences"
+    contexts: [sky, urban, varied backgrounds]
+    annotation_format: "detection: per-image boxes (VOC xml or xywh txt - unverified); tracking: groundtruth.txt x,y,w,h"
+    license: "repository reported as Apache-2.0 (ecosyste.ms metadata); dataset-specific terms not verified on the repo itself"
+    commercial_ok: unclear
+    access: manual
+    converter: voc_xml        # or rect_txt for the tracking split
+    verified: [size, repo]
+    notes: "A secondary summary claims MIT + commercial use; not confirmed on the primary page. Treat as unclear."
+
+  - id: anti_uav
+    name: Anti-UAV benchmark (Anti-UAV300 RGB+IR, Anti-UAV410 IR, Anti-UAV600 IR)
+    url: https://github.com/ZhaoJ9014/Anti-UAV
+    modality: [rgb, ir]
+    size: "300: 318 seq / ~297K frames RGB+IR; 410: 410 seq / ~438K IR; 600: 600 seq / ~723K IR (survey arXiv:2504.11967)"
+    contexts: [day, night, harsh weather, urban, sky]
+    annotation_format: "per-sequence label json with exist flags + rects (converter: anti_uav_json; schema unverified)"
+    license: "Repo states 'The project of Anti-UAV is released under the MIT License'; no separate dataset terms"
+    commercial_ok: unclear
+    access: manual
+    links: {anti_uav300: "Google Drive / Baidu (pw sagx)", anti_uav410: "Baidu (pw wfds)", anti_uav600: "https://modelscope.cn/datasets/ly261666/3rd_Anti-UAV/files"}
+    converter: anti_uav_json
+    verified: [repo license statement, modality per version, download hosts]
+    notes: "Best night + IR coverage available. MIT covers the code; the videos' licensing is not spelled out."
+
+  - id: drone_vs_bird
+    name: Drone-vs-Bird Detection Challenge (WOSDETC)
+    url: https://github.com/wosdetc/challenge
+    modality: [rgb]
+    size: "77 sequences / ~105K frames (2021 edition per survey); grows each edition"
+    contexts: [far distance, birds, sky, coast, urban]
+    annotation_format: "per video txt: framenum n x y w h class ... (converter: wosdetc_txt)"
+    license: "data usage agreement, research purposes"
+    commercial_ok: "no"
+    access: request
+    request: "email wosdetc@googlegroups.com and sign the data usage agreement"
+    converter: wosdetc_txt
+    verified: [access method, annotation format, research-purpose terms]
+
+  - id: halmstad_multisensor
+    name: Multi-sensor drone detection dataset (Halmstad University; IR + visible + audio)
+    url: https://doi.org/10.5281/zenodo.5500576
+    paper: https://arxiv.org/abs/2111.01888
+    modality: [rgb, ir, audio]
+    size: "365 IR clips (320x256), 285 visible clips (640x512), 10 s each, 203,328 annotated frames; 90 audio clips"
+    contexts: [daylight, clear to overcast, airports, rural Sweden, distance bins close/medium/distant]
+    classes_source: [airplane, bird, drone, helicopter]
+    annotation_format: "MATLAB groundTruth .mat (export with training/convert/export_halmstad_labels.m, converter: halmstad_csv)"
+    license: "article is CC BY 4.0; a separate data license was not found in the paper - check the Zenodo record"
+    commercial_ok: unclear
+    access: direct
+    fetch: {method: zenodo, record: "5500576"}
+    converter: halmstad_csv
+    verified: [counts, classes, label format, hosting DOI]
+    notes: "Daylight only. Some clips come from the YouTube channel 'Virtual Airfield'."
+
+  - id: kios_uav
+    name: KIOS Unmanned Aerial Vehicles detection dataset (Univ. of Cyprus)
+    url: https://www.kios.ucy.ac.cy/evai/datasets/unmanned-aerial-vehicles/
+    modality: [rgb]
+    size: "1,535 images, 1,620 drone boxes (768/384/383)"
+    contexts: [varied angles, varied lighting]
+    annotation_format: "COCO, YOLO and VOC provided (converter: coco_json or yolo_passthrough)"
+    license: "not stated on the dataset page"
+    commercial_ok: unclear
+    access: direct
+    fetch: {method: zenodo, record: "7477569"}
+    converter: coco_json
+    verified: [size, formats, Zenodo record]
+
+  - id: det_fly
+    name: Det-Fly (air-to-air micro-UAV detection, Westlake University)
+    url: https://github.com/Jake-WU/Det-Fly
+    paper: https://shiyuzhao.westlake.edu.cn/2020IEEEye.pdf
+    modality: [rgb]
+    size: "13,271 images 3840x2160, one DJI Mavic per image"
+    contexts: [sky, urban, field, mountain]
+    annotation_format: "bounding boxes; file format unverified (VOC xml likely)"
+    license: "not stated in the paper"
+    commercial_ok: unclear
+    access: manual
+    converter: voc_xml
+    verified: [size, scenes, repo]
+    notes: "4K frames with small targets: tile them."
+
+  - id: mav_vid
+    name: MAV-VID
+    url: "unverified (commonly mirrored on Kaggle)"
+    modality: [rgb]
+    size: "64 videos / 40,232 images (arXiv:2103.13933)"
+    contexts: [sky, ground-to-air]
+    annotation_format: unverified
+    license: "not stated in the benchmark paper"
+    commercial_ok: unclear
+    access: manual
+    converter: voc_xml
+    verified: [size]
+
+  - id: cst_anti_uav
+    name: CST Anti-UAV (thermal tiny UAV tracking, ICCV 2025 workshop)
+    url: https://github.com/PCwenyue/CST-Anti-UAV
+    paper: https://arxiv.org/abs/2507.23473
+    modality: [ir]
+    size: "220 sequences (120/40/60), 240K+ boxes, 640x512 @ 25 fps"
+    contexts: [complex dynamic background, thermal crossover, occlusion, tiny targets]
+    annotation_format: "per-frame boxes + attribute flags; file format unverified (rect_txt likely)"
+    license: "not stated in the paper"
+    commercial_ok: unclear
+    access: manual
+    converter: rect_txt
+    verified: [size, modality, repo]
+
+  - id: rgbt_tiny
+    name: RGBT-Tiny (visible-thermal tiny objects)
+    url: https://github.com/XinyiYing/RGBT-Tiny
+    paper: https://arxiv.org/abs/2406.14482
+    modality: [rgb, ir]
+    size: "115 paired sequences, ~93K frames, 1.2M boxes, 640x512"
+    classes_source: [ship, car, cyclist, pedestrian, bus, drone, plane]
+    contexts: [tiny objects, day, night]
+    annotation_format: unverified (COCO likely)
+    license: "unclear - CC BY-NC-SA 4.0 appears on the paper page, dataset terms not confirmed"
+    commercial_ok: unclear
+    access: manual
+    converter: coco_json
+    verified: [size, classes]
+
+  - id: mmaud
+    name: MMAUD multi-modal anti-UAV dataset (NTU ARIS)
+    url: https://ntu-aris.github.io/MMAUD
+    modality: [rgb, audio, radar, lidar]
+    size: "V1 rosbags 11-20 GB each; V2/V3 carpark scenes up to 100 m altitude; 6,588 background-noise audio files"
+    contexts: [rooftop, carpark, "V2/V3 'designed for actual warfare simulation' per authors"]
+    annotation_format: "rosbag ground truth; 2D detection subset with drone labels"
+    license: CC BY-NC-SA 4.0
+    commercial_ok: "no"
+    access: manual
+    converter: yolo_passthrough
+    verified: [license, modalities, hosting]
+    notes: "Commercial use requires contacting NTU ARIS."
+
+  - id: fbd_sv_2024
+    name: FBD-SV-2024 flying bird detection in surveillance video
+    url: https://figshare.com/articles/dataset/FBD-SV-2024/27377595
+    paper: https://arxiv.org/abs/2409.00317
+    modality: [rgb]
+    size: "483 clips (400/83), 28,694 frames, 28,366 bird boxes, 1280x720 @ 25 fps, 1.67 GB"
+    contexts: [outdoor surveillance cameras, complex backgrounds]
+    annotation_format: "labelImg boxes xmin ymin xmax ymax, class bird (converter: voc_xml)"
+    license: "'for learning and research purposes only, not for commercial use'"
+    commercial_ok: "no"
+    access: direct
+    fetch: {method: figshare, article: "27377595"}
+    converter: voc_xml
+    verified: [license text, size, box format]
+    notes: "Frames must be extracted from the videos with the authors' scripts."
+
+  - id: aod4
+    name: AOD 4 airborne object detection
+    url: https://data.mendeley.com/datasets/cd5z895tr2/1
+    modality: [rgb]
+    size: "22,516 images; classes airplane, helicopter, drone, bird"
+    contexts: [varied backgrounds, lighting, weather, multi-object]
+    annotation_format: unverified
+    license: CC BY 4.0
+    commercial_ok: unclear
+    access: manual
+    converter: yolo_passthrough
+    verified: [license, size, classes]
+    notes: "License is permissive but image provenance is not stated; third-party copyright may apply."
+
+  - id: amateur_drone_mendeley
+    name: "Drone Dataset: Amateur Unmanned Air Vehicle Detection"
+    url: https://data.mendeley.com/datasets/zcsj2g2m4c
+    modality: [rgb]
+    size: "4,000+ drone images plus drone-like negatives"
+    annotation_format: "YOLO/darknet style (stated as suitable, unverified)"
+    license: CC BY 4.0
+    commercial_ok: unclear
+    access: manual
+    converter: yolo_passthrough
+    verified: [license, content description]
+    notes: "Authors say images were gathered from YouTube videos and Google image search: the CC BY grant cannot cover third-party copyright."
+
+  - id: dronerf
+    name: DroneRF (RF recordings of drones)
+    url: https://data.mendeley.com/datasets/f4c2b4n755/1
+    modality: [rf]
+    size: "227 segments from 3 drones plus background RF"
+    annotation_format: "per-segment files labelled by drone/mode (for the RF sensor model, not the camera)"
+    license: CC BY 4.0
+    commercial_ok: "yes"
+    access: manual
+    converter: null
+    verified: [license, content]
+    notes: "For calibrating the RF sensor model; not used by the camera detector."
+
+  - id: swinseg
+    name: SWINSEG nighttime sky/cloud images
+    url: https://ieee-dataport.org/node/1386
+    modality: [rgb]
+    size: "115 nighttime sky patches 500x500, 3.34 MB"
+    annotation_format: "sky/cloud segmentation masks (used as background plates only)"
+    license: CC BY 4.0
+    commercial_ok: "yes"
+    access: manual
+    converter: null
+    verified: [license, size, subscription requirement]
+    notes: "IEEE DataPort subscription required. Use as night-sky backgrounds for synthetic compositing."
+
+  - id: drexel_long_range
+    name: Drexel Long-Range Drone Detection dataset
+    url: https://research.coe.drexel.edu/ece/imaple/?p=453
+    modality: [rgb]
+    license: CDLA-Permissive-2.0 (no redistribution)
+    commercial_ok: "yes"
+    access: unavailable
+    converter: null
+    verified: [license, access on hold, export-control notice]
+    notes: "Access currently on hold and subject to US export regulations."
+
+  - id: drone_audio_alemadi
+    name: Drone audio clips (Al-Emadi et al., IWCMC 2019)
+    url: http://hdl.handle.net/10576/14867
+    modality: [audio]
+    size: "~1,332 clips (survey arXiv:2504.11967)"
+    license: "not found"
+    commercial_ok: unclear
+    access: manual
+    converter: null
+    verified: [paper]
+    notes: "For the acoustic sensor model."
+
+  - id: pixabay_video
+    name: Pixabay videos via API (sky, birds, drones, stadium, skyline at night)
+    url: https://pixabay.com/api/docs/
+    modality: [rgb]
+    license: "Pixabay Content License; API rules: cache requests 24 h, show source, 'Systematic mass downloads are not allowed'"
+    commercial_ok: unclear
+    access: direct
+    fetch: {method: pixabay, env_key: PIXABAY_API_KEY}
+    converter: null
+    verified: [API endpoint, rate limit 100 req/60 s, no-mass-download rule]
+    notes: "Background plates and hard negatives, unlabelled. fetch.py caps volume and needs --accept-pixabay-terms. ML-training terms were not confirmed (terms page failed to load)."
+
+  - id: pexels_video
+    name: Pexels videos
+    url: https://pexels.com/terms-of-service
+    modality: [rgb]
+    license: "Pexels license (free incl. commercial) BUT Terms s.8 forbid automated collection 'for machine learning purposes' and bulk copying without permission"
+    commercial_ok: permission_required
+    access: request
+    fetch: {method: pexels, env_key: PEXELS_API_KEY}
+    converter: null
+    verified: [ToS clauses on scraping, bulk copying and ML]
+    notes: "fetch.py refuses unless you pass --pexels-permission-ref with your written permission reference."
+
+  - id: own_footage
+    name: Your own flights and site recordings
+    modality: [rgb, ir, audio, rf]
+    license: owned
+    commercial_ok: "yes"
+    access: direct
+    converter: yolo_passthrough
+    notes: "The single most valuable source: your cameras, your sites, night, your drones with and without packages. Label with CVAT/Label Studio, export YOLO."
+
+  - id: synthetic
+    name: sim-core generate_dataset.py
+    modality: [rgb, ir]
+    license: owned
+    commercial_ok: "yes"
+    access: direct
+    converter: yolo_passthrough
+    notes: "Training only. Never in the test split."

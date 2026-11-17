@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' blob: data:; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0a0f14">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Drone Watch Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Field tool: the video owns the screen; status, objects and settings stack in a side column (under the video on phones).
+     Single dark theme for night use. 4 px spacing scale, 5-step type scale, 40 px touch targets. */
+  --bg:#0a0f14; --panel:#111922; --raise:#18232e; --line:#25343f; --ink:#dbe5ed; --muted:#9aabba; --dim:#7f909f;
+  --accent:#4cc2d8; --warn:#f0a93b; --crit:#ff5b52; --ok:#5ac88b;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
+  --t1:12px; --t2:13px; --t3:14px; --t4:16px; --t5:20px;
+  --r:4px; --tap:40px;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--display);font-size:var(--t3);line-height:1.4}
+button,select,input{font:inherit;color:inherit}
+button,.btn{background:var(--raise);border:1px solid var(--line);border-radius:var(--r);padding:0 var(--s3);min-height:var(--tap);cursor:pointer;display:inline-flex;align-items:center;gap:var(--s2)}
+button:hover,.btn:hover{background:#1f2d3a;border-color:var(--dim)}
+button:active,.btn:active{background:#152029}
+button[aria-pressed="true"]{background:#173640;border-color:var(--accent);color:#eafbff}
+button:disabled{color:var(--dim);border-style:dashed;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=number],input[type=text]{background:var(--raise);border:1px solid var(--line);border-radius:var(--r);padding:0 var(--s2);min-height:var(--tap)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.app{display:grid;grid-template-rows:auto 1fr;min-height:100%}
+header{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);align-items:center;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{margin:0;font-size:var(--t4);font-weight:700;letter-spacing:.01em}
+header p{margin:0;color:var(--muted);font-size:var(--t1)}
+.src{display:flex;flex-wrap:wrap;gap:var(--s2);margin-left:auto;align-items:center}
+.src input[type=file]{display:none}
+main{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:0}
+.stage{position:relative;background:#000;display:flex;align-items:center;justify-content:center;min-height:320px;border-right:1px solid var(--line)}
+#view{max-width:100%;max-height:calc(100vh - 72px);display:block;cursor:crosshair}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--s3);color:var(--muted);text-align:center;padding:var(--s5)}
+.empty h2{margin:0;color:var(--ink);font-size:var(--t5);text-wrap:balance}
+.empty p{margin:0;max-width:52ch;line-height:1.5}
+.banner{position:absolute;left:var(--s3);right:var(--s3);top:var(--s3);padding:var(--s3) var(--s4);border-radius:var(--r);background:var(--crit);color:#1d0606;font-weight:700;font-size:var(--t4);display:none;align-items:center;justify-content:space-between;gap:var(--s3)}
+.banner.on{display:flex}
+@media (prefers-reduced-motion:no-preference){.banner.on{animation:pulse 1s infinite}}
+@keyframes pulse{50%{opacity:.8}}
+.hud{position:absolute;left:var(--s3);bottom:var(--s3);font-family:var(--mono);font-size:var(--t1);color:#dcebf3;background:#000;padding:var(--s1) var(--s2);border-radius:var(--r)}
+aside{display:flex;flex-direction:column;gap:var(--s3);padding:var(--s3);overflow-y:auto;max-height:calc(100vh - 64px)}
+aside>*{flex-shrink:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:var(--s3)}
+.card h2{margin:0 0 var(--s2);font-size:var(--t1);font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:flex;justify-content:space-between;gap:var(--s2);align-items:center}
+.state{display:flex;align-items:center;gap:var(--s3)}
+.pill{font-family:var(--mono);font-size:var(--t1);padding:2px var(--s2);border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.pill.ALERT{background:var(--crit);border-color:var(--crit);color:#1d0606;font-weight:700}
+.pill.WATCH{background:transparent;border-color:var(--warn);color:var(--warn)}
+.pill.CLEAR{color:var(--ok);border-color:#2b5a40}
+.big{font-size:var(--t5);font-weight:700;line-height:1.2}
+table{width:100%;border-collapse:collapse;font-size:var(--t1)}
+th{text-align:left;color:var(--muted);font-weight:500;font-size:var(--t1);text-transform:uppercase;letter-spacing:.05em;padding:var(--s1);border-bottom:1px solid var(--line)}
+td{padding:var(--s1);border-bottom:1px solid #18232d;font-family:var(--mono);font-size:var(--t1)}
+td.drone{color:var(--crit);font-weight:600}td.bird{color:#8fdcae}td.unknown{color:var(--warn)}
+.set{display:grid;grid-template-columns:1fr auto;gap:var(--s2) var(--s3);align-items:center;font-size:var(--t2)}
+.set input[type=range]{width:130px;accent-color:var(--accent)}
+.set .chk{display:flex;gap:var(--s2);align-items:center;grid-column:1/-1;min-height:28px}
+.note{color:var(--muted);font-size:var(--t1);line-height:1.5;margin:var(--s2) 0 0}
+#events{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--s2);max-height:360px;overflow:auto}
+#events li{display:grid;grid-template-columns:84px 1fr;gap:var(--s3);align-items:start;border-bottom:1px solid #18232d;padding-bottom:var(--s2)}
+#events img{width:84px;height:84px;object-fit:cover;border-radius:var(--r);border:1px solid var(--line);background:#000}
+#events .lbls{display:flex;flex-wrap:wrap;gap:var(--s1);margin-top:var(--s1)}
+#events .lbls button{min-height:30px;padding:0 var(--s2);font-size:var(--t1)}
+.row{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center}
+.modelst{font-family:var(--mono);font-size:var(--t1);color:var(--muted)}
+#out{width:100%;height:90px;margin-top:var(--s2);font-family:var(--mono);font-size:var(--t1);background:#0c141b;color:#b4cdd9;border:1px solid var(--line);border-radius:var(--r);display:none}
+@media (max-width:900px){main{grid-template-columns:1fr}.stage{border-right:0;border-bottom:1px solid var(--line)}aside{max-height:none}#view{max-height:70vh}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div>
+    <h1>Drone Watch Live</h1>
+    <p>Point any camera at the sky. Detection runs on this device; video is never uploaded.</p>
+  </div>
+  <div class="src" role="group" aria-label="Video source">
+    <button type="button" id="btnCam">Use camera</button>
+    <select id="camSel" aria-label="Camera" hidden></select>
+    <label class="btn" for="fileIn">Open video or photo</label>
+    <input type="file" id="fileIn" accept="video/*,image/*">
+    <button type="button" id="btnDemo">Demo sky</button>
+    <button type="button" id="btnPause" disabled>Pause</button>
+  </div>
+</header>
+<main>
+  <section class="stage" id="stage">
+    <canvas id="view" width="960" height="540" aria-label="Video with detections"></canvas>
+    <div class="empty" id="empty">
+      <h2>Choose a video source to start</h2>
+      <p><b>Use camera</b> works on a phone or laptop when this app is opened from an https address or localhost. <b>Open video or photo</b> works everywhere. <b>Demo sky</b> plays a generated test scene with a drone and birds.</p>
+    </div>
+    <div class="banner" id="banner" role="alert"><span id="bannerTxt">DRONE DETECTED</span><span class="mono" id="bannerT"></span></div>
+    <div class="hud" id="hud">idle</div>
+  </section>
+  <aside>
+    <div class="card">
+      <h2>Status</h2>
+      <div class="state"><span class="pill CLEAR" id="pill">CLEAR</span><span class="big" id="stateTxt">No drones in view</span></div>
+      <p class="note" id="stateNote">Objects must be seen for about one second before they're classified.</p>
+    </div>
+    <div class="card">
+      <h2>Tracked objects <span class="mono" id="nTracks">0</span></h2>
+      <table><thead><tr><th>ID</th><th>Class</th><th>Drone %</th><th>Wingbeat</th><th>Motion</th></tr></thead><tbody id="tbl"><tr><td colspan="5" style="color:var(--muted)">Nothing tracked yet</td></tr></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Detector</h2>
+      <div class="set">
+        <label for="sens">Sensitivity</label><input type="range" id="sens" min="1" max="10" value="6">
+        <label for="minpx">Smallest object (px)</label><input type="range" id="minpx" min="1" max="20" value="2">
+        <label for="thr">Alert threshold</label><input type="range" id="thr" min="50" max="95" value="75">
+        <label class="chk"><input type="checkbox" id="skyOnly" checked>Ignore textured areas (trees, buildings, ground)</label>
+        <label class="chk"><input type="checkbox" id="stab" checked>Cancel camera shake</label>
+        <label class="chk"><input type="checkbox" id="dbg">Show motion mask</label>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Trained model (optional)</h2>
+      <div class="row">
+        <label class="btn" for="onnxIn">Load .onnx model</label><input type="file" id="onnxIn" accept=".onnx" hidden>
+        <span class="modelst" id="modelSt">Not loaded · using motion + wingbeat rules</span>
+      </div>
+      <div class="set" style="margin-top:8px">
+        <label for="classes">Class names</label><input type="text" id="classes" value="drone,drone_payload,bird,other" style="width:190px">
+        <label for="mhash">Expected SHA-256</label><input type="text" id="mhash" placeholder="from the model card" autocomplete="off" spellcheck="false" style="width:190px">
+        <label for="mconf">Model confidence</label><input type="range" id="mconf" min="10" max="90" value="35">
+      </div>
+      <p class="note">Load the YOLO model exported by the training pipeline (<span class="mono">training/run_pipeline.sh</span>). It runs in your browser with ONNX Runtime Web. Loading the model needs the self-hosted version of this app.</p>
+    </div>
+    <div class="card">
+      <h2>Events <span class="row"><button type="button" id="btnSnap">Save frame for training</button></span></h2>
+      <ol id="events"></ol>
+      <div class="row" style="margin-top:8px"><button type="button" id="btnExport">Export labels (JSON)</button><span class="note" id="expNote"></span></div>
+      <textarea id="out" readonly aria-label="Exported labels"></textarea>
+      <p class="note">Correct any wrong labels before exporting. <span class="mono">training/import_liveapp.py</span> turns the export into YOLO training data for your own sites.</p>
+    </div>
+  </aside>
+</main>
+</div>
+<video id="vid" playsinline muted loop hidden></video>
+
+<script>
+"use strict";
+if(location.protocol==="http:"&&!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))location.replace("https://"+location.host+location.pathname+location.search);
+// ============ helpers ============
+const $=id=>document.getElementById(id);
+const esc=v=>String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const sigmoid=x=>1/(1+Math.exp(-x));
+const view=$("view"),vctx=view.getContext("2d");
+const vid=$("vid");
+let source=null;      // {kind:"camera"|"video"|"image"|"demo", el, w, h}
+let running=false,paused=false;
+const S={sens:6,minpx:2,thr:0.75,skyOnly:true,stab:true,dbg:false,mconf:0.35};
+
+// ============ sources ============
+async function listCams(){try{const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");const sel=$("camSel");sel.innerHTML=ds.map((d,i)=>`<option value="${esc(d.deviceId)}">${esc(d.label||"Camera "+(i+1))}</option>`).join("");sel.hidden=ds.length<2}catch(e){}}
+async function startCamera(deviceId){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){showMsg("This browser can't open a camera here. Open the app from an https address (or localhost), or use Open video.");return}
+  stopSource();
+  try{
+    const c=deviceId?{deviceId:{exact:deviceId}}:{facingMode:{ideal:"environment"}};
+    const stream=await navigator.mediaDevices.getUserMedia({video:{...c,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
+    vid.srcObject=stream;vid.loop=false;await vid.play();
+    source={kind:"camera",el:vid,stream};await listCams();begin();
+  }catch(e){showMsg(e&&e.name==="NotAllowedError"?"Camera permission was denied. Allow camera access in your browser settings and try again.":e&&e.name==="NotFoundError"?"No camera was found on this device.":"The camera could not be opened here. This happens inside embedded previews; open the self-hosted app from an https address, or use Open video.")}
+}
+function stopSource(){if(source&&source.stream)source.stream.getTracks().forEach(t=>t.stop());if(source&&source.url)URL.revokeObjectURL(source.url);vid.pause();vid.removeAttribute("src");vid.srcObject=null;source=null}
+function openFile(f){
+  if(!f)return;stopSource();const url=URL.createObjectURL(f);
+  if(f.type.startsWith("image/")){const img=new Image();img.onload=()=>{source={kind:"image",el:img,url};begin()};img.onerror=()=>showMsg("That image could not be read.");img.src=url;return}
+  vid.srcObject=null;vid.src=url;vid.loop=true;vid.onloadeddata=()=>{vid.play().catch(()=>{});source={kind:"video",el:vid,url};begin()};vid.onerror=()=>showMsg("That video format isn't supported by this browser. Try an MP4 (H.264) or WebM file.");
+}
+function showMsg(t){const e=$("empty");e.style.display="flex";e.innerHTML=`<h2>Can't start</h2><p>${esc(t)}</p>`}
+
+// ---- demo: generated sky with a drone that hovers, birds with wingbeats, clouds, tree line, hand shake
+const demo={c:document.createElement("canvas"),t:0};demo.c.width=960;demo.c.height=540;
+const clouds=(()=>{const c=document.createElement("canvas");c.width=1600;c.height=540;const x=c.getContext("2d");for(let i=0;i<70;i++){const cx=Math.random()*1600,cy=40+Math.random()*260,r=40+Math.random()*120;const g=x.createRadialGradient(cx,cy,0,cx,cy,r);g.addColorStop(0,"rgba(255,255,255,.22)");g.addColorStop(1,"rgba(255,255,255,0)");x.fillStyle=g;x.fillRect(cx-r,cy-r,2*r,2*r)}return c})();
+const demoBirds=Array.from({length:4},(_,i)=>({x:Math.random()*960,y:80+Math.random()*250,vx:(Math.random()<.5?-1:1)*(40+Math.random()*50),vy:(Math.random()-.5)*10,hz:3.2+Math.random()*2.5,ph:Math.random()*6,s:5+Math.random()*4}));
+function drawDemo(dt){
+  const c=demo.c.getContext("2d"),t=(demo.t+=dt),W=960,H=540;
+  const sx=Math.sin(t*1.7)*2+Math.sin(t*4.1)*1.2,sy=Math.cos(t*1.3)*1.6+Math.sin(t*3.3);
+  c.save();c.translate(sx,sy);
+  const g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,"#4f7fb3");g.addColorStop(0.75,"#9fc0dc");g.addColorStop(1,"#d9e6ef");c.fillStyle=g;c.fillRect(-10,-10,W+20,H+20);
+  const off=(t*8)%1600;c.drawImage(clouds,-off,0);c.drawImage(clouds,1600-off,0);
+  // tree line (textured, swaying) to test "ignore textured areas"
+  c.fillStyle="#22331f";c.beginPath();c.moveTo(-10,H+10);for(let x=-10;x<=W+10;x+=6){const h=70+Math.sin(x*0.05)*18+Math.sin(x*0.17+t*2)*4+Math.sin(x*0.9)*6;c.lineTo(x,H-h)}c.lineTo(W+10,H+10);c.fill();
+  // birds
+  for(const b of demoBirds){b.x+=b.vx*dt;b.y+=b.vy*dt+Math.sin(t+b.ph)*0.3;if(b.x<-30)b.x=W+30;if(b.x>W+30)b.x=-30;
+    const f=Math.sin(t*2*Math.PI*b.hz+b.ph),span=b.s*2,tip=f*b.s*0.9;c.strokeStyle="#1d2328";c.lineWidth=1.6;c.beginPath();c.moveTo(b.x-span,b.y-tip);c.quadraticCurveTo(b.x-span*0.4,b.y-tip*0.3-2,b.x,b.y);c.quadraticCurveTo(b.x+span*0.4,b.y-tip*0.3-2,b.x+span,b.y-tip);c.stroke();c.fillStyle="#1d2328";c.beginPath();c.ellipse(b.x,b.y,2.4,1.3,0,0,7);c.fill()}
+  // drone: crosses, hovers, descends, leaves (12 s loop... 24 s)
+  const T=t%24;let dx,dy;if(T<7){dx=-40+T/7*560;dy=150+T*6}else if(T<12){dx=520+Math.sin(T*3)*1.5;dy=192+Math.cos(T*2.3)*1.2}else if(T<16){dx=520;dy=192+(T-12)*30}else{dx=520+(T-16)*70;dy=312-(T-16)*20}
+  const s=7;c.fillStyle="#15191d";c.strokeStyle="#15191d";c.lineWidth=1.6;c.beginPath();c.moveTo(dx-s,dy-s*0.35);c.lineTo(dx+s,dy+s*0.35);c.moveTo(dx+s,dy-s*0.35);c.lineTo(dx-s,dy+s*0.35);c.stroke();
+  c.fillRect(dx-2.5,dy-1.5,5,3);c.fillStyle="rgba(30,35,40,.35)";for(const[a,b]of[[-s,-s*0.35],[s,s*0.35],[s,-s*0.35],[-s,s*0.35]]){c.beginPath();c.ellipse(dx+a,dy+b,3.6,1.2,0,0,7);c.fill()}
+  if(T<16){c.strokeStyle="#2a2620";c.lineWidth=0.8;c.beginPath();c.moveTo(dx,dy+1.5);c.lineTo(dx,dy+9);c.stroke();c.fillStyle="#6b5634";c.fillRect(dx-2,dy+9,4,3)}
+  c.restore();
+  // sensor noise
+  c.globalAlpha=0.06;c.fillStyle="#000";for(let i=0;i<1500;i++)c.fillRect(Math.random()*W,Math.random()*H,1,1);c.globalAlpha=1;
+  demo.truth={x:dx+sx,y:dy+sy};
+}
+function startDemo(){stopSource();demo.t=0;source={kind:"demo",el:demo.c};drawDemo(0);begin()}
+
+// ============ detector state ============
+let PW=320,PH=180,N=PW*PH;
+const proc=document.createElement("canvas"),pctx=proc.getContext("2d",{willReadFrequently:true});
+let gray,prevGray,bg,vari,fgMask,skyMask,labels,frameNo=0,lastT=0,fpsE=0;
+function alloc(w,h){const sc=Math.min(1,360/Math.max(w,h)*(w>h?1:1));PW=Math.max(64,Math.round(w*Math.min(1,360/w)));PH=Math.max(48,Math.round(h*PW/w));if(PH>360){PH=360;PW=Math.round(w*PH/h)}N=PW*PH;proc.width=PW;proc.height=PH;
+  gray=new Float32Array(N);prevGray=null;bg=null;vari=new Float32Array(N).fill(36);fgMask=new Uint8Array(N);skyMask=new Uint8Array(N).fill(1);labels=new Int32Array(N);tracks=[];nextId=1}
+function begin(){
+  const el=source.el,w=el.videoWidth||el.naturalWidth||el.width,h=el.videoHeight||el.naturalHeight||el.height;
+  source.w=w;source.h=h;const maxW=1280;view.width=Math.min(maxW,w);view.height=Math.round(view.width*h/w);
+  alloc(w,h);$("empty").style.display="none";$("btnPause").disabled=false;paused=false;$("btnPause").textContent="Pause";events.length=0;renderEvents();
+  if(!running){running=true;requestAnimationFrame(loop)}
+}
+// ---- global shift estimate (camera shake) by coarse-to-fine SAD block matching
+function estimateShift(a,b){
+  const s=4,w=Math.floor(PW/s),h=Math.floor(PH/s),A=new Float32Array(w*h),B=new Float32Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let sa=0,sb=0;for(let j=0;j<s;j++)for(let i=0;i<s;i++){const k=(y*s+j)*PW+x*s+i;sa+=a[k];sb+=b[k]}A[y*w+x]=sa;B[y*w+x]=sb}
+  let best=[0,0],bs=1e30;const R=3;
+  for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){let sum=0,n=0;for(let y=R;y<h-R;y++)for(let x=R;x<w-R;x++){sum+=Math.abs(A[y*w+x]-B[(y+dy)*w+x+dx]);n++}sum/=n;if(sum<bs){bs=sum;best=[dx,dy]}}
+  let fx=best[0]*s,fy=best[1]*s;bs=1e30;let fb=[fx,fy];
+  for(let dy=fy-2;dy<=fy+2;dy++)for(let dx=fx-2;dx<=fx+2;dx++){let sum=0,n=0;const m=Math.max(Math.abs(dx),Math.abs(dy))+2;for(let y=m;y<PH-m;y+=2)for(let x=m;x<PW-m;x+=2){sum+=Math.abs(a[y*PW+x]-b[(y+dy)*PW+x+dx]);n++}sum/=n;if(sum<bs){bs=sum;fb=[dx,dy]}}
+  return fb; // a(x,y) ≈ b(x+dx,y+dy)
+}
+function shiftArr(arr,dx,dy,fill){const out=new Float32Array(N);for(let y=0;y<PH;y++)for(let x=0;x<PW;x++){const sx=x+dx,sy=y+dy;out[y*PW+x]=(sx>=0&&sx<PW&&sy>=0&&sy<PH)?arr[sy*PW+sx]:fill[y*PW+x]}return out}
+// ---- texture mask: blocks with strong gradients (trees, buildings, ground) are excluded
+function updateSky(){
+  const B=8,bw=Math.ceil(PW/B),bh=Math.ceil(PH/B),tex=new Float32Array(bw*bh);
+  for(let y=1;y<PH-1;y++)for(let x=1;x<PW-1;x++){const k=y*PW+x;const g=Math.abs(gray[k+1]-gray[k-1])+Math.abs(gray[k+PW]-gray[k-PW]);tex[((y/B)|0)*bw+((x/B)|0)]+=g}
+  const thr=6*B*B; // average gradient per pixel above ~6 grey levels = textured
+  for(let by=0;by<bh;by++)for(let bx=0;bx<bw;bx++){let t=tex[by*bw+bx];
+    // a lone small object inside an otherwise smooth block must not mark the block as textured: use the 2nd-largest neighbour too
+    const v=t>thr?0:1;for(let y=by*B;y<Math.min(PH,(by+1)*B);y++)for(let x=bx*B;x<Math.min(PW,(bx+1)*B);x++)skyMask[y*PW+x]=v}
+  // dilate the textured region by one block so edges of trees don't fire
+  const m=skyMask.slice();for(let y=0;y<PH;y++)for(let x=0;x<PW;x++){if(m[y*PW+x])continue;for(let j=-6;j<=6;j+=3)for(let i=-6;i<=6;i+=3){const yy=y+j,xx=x+i;if(yy>=0&&yy<PH&&xx>=0&&xx<PW)skyMask[yy*PW+xx]=0}}
+  // reopen tiny "textured" islands fully surrounded by sky: those are objects, not trees
+  const bwB=bw,blk=new Uint8Array(bw*bh);for(let by=0;by<bh;by++)for(let bx=0;bx<bw;bx++)blk[by*bw+bx]=tex[by*bw+bx]>thr?1:0;
+  for(let by=1;by<bh-1;by++)for(let bx=1;bx<bw-1;bx++){if(!blk[by*bw+bx])continue;let nb=0;for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++)nb+=blk[(by+j)*bw+bx+i];
+    if(nb<=2){for(let y=(by-1)*B;y<Math.min(PH,(by+2)*B);y++)for(let x=(bx-1)*B;x<Math.min(PW,(bx+2)*B);x++)skyMask[y*PW+x]=1}}
+}
+// ---- connected components (4-conn) on the foreground mask
+function blobs(){
+  labels.fill(0);const parent=[0];let nl=0;
+  const find=a=>{while(parent[a]!==a){parent[a]=parent[parent[a]];a=parent[a]}return a};
+  for(let y=0;y<PH;y++)for(let x=0;x<PW;x++){const k=y*PW+x;if(!fgMask[k])continue;const l=x>0?labels[k-1]:0,u=y>0?labels[k-PW]:0;
+    if(!l&&!u){nl++;parent.push(nl);labels[k]=nl}else if(l&&u){const a=find(l),b=find(u);labels[k]=Math.min(a,b);parent[Math.max(a,b)]=Math.min(a,b)}else labels[k]=l||u}
+  const st=new Map();
+  for(let k=0;k<N;k++){if(!labels[k])continue;const r=find(labels[k]);let s=st.get(r);if(!s){s={n:0,sx:0,sy:0,x0:1e9,y0:1e9,x1:-1,y1:-1,c:0};st.set(r,s)}const x=k%PW,y=(k/PW)|0;s.n++;s.sx+=x;s.sy+=y;if(x<s.x0)s.x0=x;if(y<s.y0)s.y0=y;if(x>s.x1)s.x1=x;if(y>s.y1)s.y1=y;s.c+=gray[k]-bg[k]}
+  const out=[];const maxA=N*0.04;
+  for(const s of st.values()){if(s.n<S.minpx||s.n>maxA)continue;out.push({x:s.sx/s.n,y:s.sy/s.n,w:s.x1-s.x0+1,h:s.y1-s.y0+1,a:s.n,c:s.c/s.n,src:"motion"})}
+  // merge fragments of the same object (e.g. drone arms) closer than 4 px
+  out.sort((a,b)=>b.a-a.a);const m=[];for(const b of out){const t=m.find(q=>Math.abs(q.x-b.x)<(q.w+b.w)/2+4&&Math.abs(q.y-b.y)<(q.h+b.h)/2+4);if(t){const x0=Math.min(t.x-t.w/2,b.x-b.w/2),x1=Math.max(t.x+t.w/2,b.x+b.w/2),y0=Math.min(t.y-t.h/2,b.y-b.h/2),y1=Math.max(t.y+t.h/2,b.y+b.h/2);t.x=(t.x*t.a+b.x*b.a)/(t.a+b.a);t.y=(t.y*t.a+b.y*b.a)/(t.a+b.a);t.a+=b.a;t.w=x1-x0;t.h=y1-y0}else m.push({...b})}
+  return m;
+}
+// ---- silhouette of the object around (cx,cy): pixels that differ from the background model (stable even when motion edges fragment)
+function silhouette(cx,cy,r){let n=0,x0=1e9,x1=-1,y0=1e9,y1=-1,sx=0,sy=0;const R=Math.max(5,Math.min(28,r|0));
+  for(let y=Math.max(1,(cy-R)|0);y<Math.min(PH-1,cy+R);y++)for(let x=Math.max(1,(cx-R)|0);x<Math.min(PW-1,cx+R);x++){const k=y*PW+x;if(Math.abs(gray[k]-bg[k])>Math.max(9,1.8*Math.sqrt(vari[k]))){n++;sx+=x;sy+=y;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}}
+  return n?{a:n,w:x1-x0+1,h:y1-y0+1,x:sx/n,y:sy/n}:null}
+// ---- local-contrast probe: keeps a hovering object tracked once motion stops
+function probe(px,py,r){let best=null,bv=0;for(let y=Math.max(3,py-r|0);y<Math.min(PH-3,py+r);y++)for(let x=Math.max(3,px-r|0);x<Math.min(PW-3,px+r);x++){const k=y*PW+x;let m=0;for(let j=-3;j<=3;j+=3)for(let i=-3;i<=3;i+=3)m+=gray[k+j*PW+i];m/=9;const v=Math.abs(gray[k]-m);if(v>bv){bv=v;best=[x,y]}}return bv>10?best:null}
+
+// ============ tracker + classifier ============
+let tracks=[],nextId=1;
+function frameDet(dt,now){
+  const sens=S.sens,k=4.6-sens*0.32,floor=22-sens*1.6;
+  if(!bg){bg=gray.slice();prevGray=gray.slice();updateSky();return[]}
+  let dx=0,dy=0;
+  if(S.stab&&source.kind!=="image"){[dx,dy]=estimateShift(prevGray,gray);if(dx||dy){bg=shiftArr(bg,-dx,-dy,gray);vari=shiftArr(vari,-dx,-dy,new Float32Array(N).fill(36));for(const t of tracks){t.x-=dx;t.y-=dy;t.hist.forEach(h=>{h.x-=dx;h.y-=dy})}}}
+  if(frameNo%10===0)updateSky();
+  for(let i=0;i<N;i++){const d=gray[i]-bg[i];const th=Math.max(floor,k*Math.sqrt(vari[i]));const x_=i%PW,y_=(i/PW)|0,edge=x_<5||y_<5||x_>=PW-5||y_>=PH-5;const f=!edge&&Math.abs(d)>th&&(!S.skyOnly||skyMask[i])?1:0;fgMask[i]=f;
+    const a=f?0.004:0.06;bg[i]+=a*d;vari[i]+=a*(d*d-vari[i]);if(vari[i]<9)vari[i]=9}
+  prevGray.set(gray);
+  return blobs();
+}
+function updTracks(dets,dt,now,modelDets){
+  // add model detections (they can see static objects) as candidates
+  for(const m of modelDets){const near=dets.find(d=>Math.abs(d.x-m.x)<Math.max(6,m.w/2)&&Math.abs(d.y-m.y)<Math.max(6,m.h/2));if(near){near.model=m}else dets.push({x:m.x,y:m.y,w:m.w,h:m.h,a:m.w*m.h*0.5,c:0,src:"model",model:m})}
+  const pairs=[];tracks.forEach((t,i)=>{const px=t.x+t.vx*dt,py=t.y+t.vy*dt;t._p=[px,py];dets.forEach((d,j)=>{const g=8+Math.max(t.w,t.h)*1.5+Math.hypot(t.vx,t.vy)*dt*0.5;const dd=Math.hypot(d.x-px,d.y-py);if(dd<g)pairs.push([dd,i,j])})});
+  pairs.sort((a,b)=>a[0]-b[0]);const uT=new Set(),uD=new Set();
+  for(const[,i,j]of pairs){if(uT.has(i)||uD.has(j))continue;uT.add(i);uD.add(j);const t=tracks[i],d=dets[j],[px,py]=t._p;
+    const rx=d.x-px,ry=d.y-py;t.x=px+0.6*rx;t.y=py+0.6*ry;t.vx+=0.25*rx/Math.max(dt,0.01);t.vy+=0.25*ry/Math.max(dt,0.01);t.w=t.w*0.7+d.w*0.3;t.h=t.h*0.7+d.h*0.3;t.hits++;t.miss=0;t.last=now;t.model=d.model||null;
+    const sl=silhouette(t.x,t.y,Math.max(t.w,t.h)*1.6+4);t.hist.push({t:now,x:t.x,y:t.y,a:sl?sl.a:d.a,w:sl?sl.w:d.w,h:sl?sl.h:d.h,c:d.c});}
+  tracks.forEach((t,i)=>{if(uT.has(i))return;
+    // no motion blob: look for a high-contrast point near the prediction (hovering object)
+    const p=probe(t._p[0],t._p[1],Math.max(4,t.w));if(p&&t.hits>4){t.x=p[0];t.y=p[1];t.vx*=0.6;t.vy*=0.6;t.last=now;t.miss=0;const sl=silhouette(t.x,t.y,Math.max(t.w,t.h)*1.6+4);t.hist.push({t:now,x:t.x,y:t.y,a:sl?sl.a:4,w:sl?sl.w:t.w,h:sl?sl.h:t.h,c:0,probe:true})}
+    else{t.miss++;t.x=t._p[0];t.y=t._p[1]}});
+  dets.forEach((d,j)=>{if(!uD.has(j)&&!tracks.some(t=>Math.hypot(t.x-d.x,t.y-d.y)<Math.max(10,Math.max(t.w,t.h)*2)))tracks.push({id:nextId++,x:d.x,y:d.y,vx:0,vy:0,w:d.w,h:d.h,hits:1,miss:0,born:now,last:now,hist:[{t:now,x:d.x,y:d.y,a:d.a,w:d.w,h:d.h,c:d.c}],pD:0.3,cls:"unknown",alertSince:null,flapHz:null,model:d.model||null,alerted:false,user:null})});
+  tracks=tracks.filter(t=>now-t.last<1.2&&!(t.hits<4&&t.miss>3));
+  tracks.sort((a,b)=>a.born-b.born);for(let i=0;i<tracks.length;i++)for(let j=tracks.length-1;j>i;j--){const a=tracks[i],b=tracks[j];if(Math.hypot(a.x-b.x,a.y-b.y)<Math.max(5,Math.max(a.w,a.h,b.w,b.h)*0.8)){a.hits+=b.hits;tracks.splice(j,1)}}
+  for(const t of tracks){t.hist=t.hist.filter(h=>now-h.t<3.2);classify(t,now)}
+}
+// wingbeat: dominant 1.5–10 Hz periodicity of blob area / height over the last ~3 s
+function wingbeat(t){
+  const H=t.hist;if(H.length<18)return null;const t0=H[0].t,T=H[H.length-1].t-t0;if(T<1.2)return null;
+  const fs=(H.length-1)/T;if(fs<10)return null;
+  const sig=H.map(h=>h.a*0.5+h.h*2),mean=sig.reduce((a,b)=>a+b,0)/sig.length;const x=sig.map(v=>v-mean);
+  // remove linear trend (object approaching/receding)
+  const n=x.length;let sx=0,sxy=0,sxx=0;for(let i=0;i<n;i++){sx+=i;sxy+=i*x[i];sxx+=i*i}const slope=(sxy-sx*0)/(sxx-sx*sx/n||1);for(let i=0;i<n;i++)x[i]-=slope*(i-(n-1)/2);
+  let tot=0;for(const v of x)tot+=v*v;if(tot<1e-6)return{hz:0,ratio:0,amp:0};
+  let best=0,bf=0;const pw=[];for(let f=1.5;f<=Math.min(20,fs/2-0.5);f+=0.25){let re=0,im=0;H.forEach((h,i)=>{const ph=2*Math.PI*f*(h.t-t0);re+=x[i]*Math.cos(ph);im+=x[i]*Math.sin(ph)});const p=(re*re+im*im)/n;pw.push(p);if(p>best){best=p;bf=f}}
+  const med=pw.slice().sort((a,b)=>a-b)[pw.length>>1]||1e-9;
+  const sm=sig.map((v,i)=>{let a=0,c=0;for(let j=Math.max(0,i-4);j<=Math.min(n-1,i+4);j++){a+=sig[j];c++}return a/c});const sMean=sm.reduce((a,b)=>a+b,0)/n;let sv=0;for(const v of sm)sv+=(v-sMean)**2;
+  return{hz:bf,ratio:best*2/tot,amp:Math.sqrt(tot/n)/Math.max(1,mean),slow:Math.sqrt(sv/n)/Math.max(1,sMean),peak:best/med};
+}
+function classify(t,now){
+  const H=t.hist;if(H.length<6||now-t.born<0.8){t.cls="unknown";return}
+  const span=H[H.length-1].t-H[0].t;const Hs=[H[0]];for(const h of H)if(h.t-Hs[Hs.length-1].t>=0.2)Hs.push(h);let path=0;for(let i=1;i<Hs.length;i++)path+=Math.hypot(Hs[i].x-Hs[i-1].x,Hs[i].y-Hs[i-1].y);
+  const net=Math.hypot(H[H.length-1].x-H[0].x,H[H.length-1].y-H[0].y),speed=path/Math.max(span,0.1),straight=path>3?net/path:1;
+  const diag=Math.hypot(PW,PH),recent=H.filter(h=>H[H.length-1].t-h.t<1.5),netSpd=recent.length>3?Math.hypot(recent[recent.length-1].x-recent[0].x,recent[recent.length-1].y-recent[0].y)/Math.max(0.3,recent[recent.length-1].t-recent[0].t):99,hover=netSpd<Math.max(3,diag*0.01)&&span>1.2;
+  const wb=wingbeat(t);/* bird wing flicker lives at 4-20 Hz; drone outlines only drift slowly */ t.flapHz=wb&&((wb.hz>=4&&wb.ratio>0.07&&wb.peak>9)||(wb.ratio>0.25&&wb.amp>0.1&&wb.peak>5))?wb.hz:null;t.feat={speed,straight,hover,wb};
+  let L=-0.4;
+  if(t.flapHz)L-=2.6;else if(wb)L+=0.7;
+  if(hover)L+=2.0;
+  if(straight>0.7&&!hover&&!t.flapHz)L+=1.0;else if(straight<0.45&&!hover)L-=0.7;
+  if(wb&&!t.flapHz){if(wb.slow<0.15)L+=0.8;else if(wb.slow>0.35)L-=1.0} // rigid outline = machine; amorphous = cloud / foliage
+  if(t.w<3&&t.h<3)L-=0.3;
+  if(t.model){const nm=t.model.name;if(/drone/i.test(nm))L+=3*t.model.conf;else if(/bird/i.test(nm))L-=3*t.model.conf;else L-=1.5*t.model.conf}
+  const p=sigmoid(L);t.pD=t.pD*0.85+p*0.15;
+  t.cls=t.user||(t.pD>=S.thr?"drone":(t.flapHz&&t.pD<0.35?"bird":"unknown"));
+  if(t.cls==="drone"){t.alertSince=t.alertSince??now;if(!t.alerted&&now-t.alertSince>1.5){t.alerted=true;addEvent(t,now)}}else t.alertSince=null;
+}
+
+// ============ optional ONNX model (YOLO export) ============
+let ort=null,session=null,modelBusy=false,modelDets=[],inSize=640;
+// ONNX Runtime Web is vendored next to the app (vendor/, fetched and integrity-checked by fetch_vendor.sh); no third-party CDN at runtime.
+async function loadOrt(){if(window.ort)return window.ort;await new Promise((res,rej)=>{const s=document.createElement("script");s.src="vendor/ort.min.js";s.onload=res;s.onerror=()=>rej(new Error("script"));document.head.appendChild(s)});window.ort.env.wasm.wasmPaths="vendor/";window.ort.env.wasm.numThreads=1;return window.ort}
+async function sha256Hex(buf){const h=await crypto.subtle.digest("SHA-256",buf);return[...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,"0")).join("")}
+async function loadModel(file){
+  $("modelSt").textContent="Loading…";
+  try{if(file.size>300*1024*1024)throw new Error("size");const buf=await file.arrayBuffer();
+    const hex=await sha256Hex(buf),want=$("mhash").value.trim().toLowerCase();
+    if(want&&want!==hex){$("modelSt").textContent=`Refused: SHA-256 ${hex.slice(0,12)}… does not match the expected hash from the model card.`;return}
+    ort=await loadOrt();session=await ort.InferenceSession.create(buf,{executionProviders:["webgpu","wasm"]}).catch(()=>ort.InferenceSession.create(buf,{executionProviders:["wasm"]}));
+    const meta=session.inputMetadata&&session.inputMetadata[0];const dims=meta&&meta.shape;if(dims&&typeof dims[2]==="number")inSize=dims[2];
+    $("modelSt").textContent=`Loaded ${file.name.slice(0,40)} · input ${inSize}px · SHA-256 ${hex.slice(0,16)}…${want?" (verified)":" (not verified)"}`}
+  catch(e){session=null;$("modelSt").textContent=e&&e.message==="script"?"Couldn't load ONNX Runtime: run fetch_vendor.sh in the self-hosted app (embedded previews block it).":e&&e.message==="size"?"Model file is larger than 300 MB; refused.":"This file couldn't be loaded as an ONNX model."}
+}
+const mcan=document.createElement("canvas"),mctx=mcan.getContext("2d",{willReadFrequently:true});
+async function runModel(el){
+  if(!session||modelBusy)return;modelBusy=true;
+  try{const sw=source.w,sh=source.h,r=Math.min(inSize/sw,inSize/sh),nw=Math.round(sw*r),nh=Math.round(sh*r),ox=(inSize-nw)/2,oy=(inSize-nh)/2;
+    mcan.width=mcan.height=inSize;mctx.fillStyle="#727272";mctx.fillRect(0,0,inSize,inSize);mctx.drawImage(el,ox,oy,nw,nh);
+    const d=mctx.getImageData(0,0,inSize,inSize).data,A=inSize*inSize,f=new Float32Array(3*A);for(let i=0;i<A;i++){f[i]=d[i*4]/255;f[A+i]=d[i*4+1]/255;f[2*A+i]=d[i*4+2]/255}
+    const out=await session.run({[session.inputNames[0]]:new ort.Tensor("float32",f,[1,3,inSize,inSize])});const o=out[session.outputNames[0]],[,C,M]=o.dims,v=o.data;
+    const names=$("classes").value.split(",").map(s=>s.trim());const dets=[];
+    for(let j=0;j<M;j++){let bc=-1,bs=0;for(let c=4;c<C;c++){const s=v[c*M+j];if(s>bs){bs=s;bc=c-4}}if(bs<S.mconf)continue;
+      const cx=(v[j]-ox)/r,cy=(v[M+j]-oy)/r,w=v[2*M+j]/r,h=v[3*M+j]/r;dets.push({x:cx,y:cy,w,h,conf:bs,name:names[bc]||("class "+bc)})}
+    dets.sort((a,b)=>b.conf-a.conf);const keep=[];for(const a of dets){if(keep.every(b=>iou(a,b)<0.45))keep.push(a)}
+    const sx=PW/sw,sy=PH/sh;modelDets=keep.slice(0,30).map(m=>({...m,x:m.x*sx,y:m.y*sy,w:m.w*sx,h:m.h*sy}));
+  }catch(e){$("modelSt").textContent="Model error: check the class count and input size.";session=null}
+  modelBusy=false;
+}
+function iou(a,b){const x0=Math.max(a.x-a.w/2,b.x-b.w/2),x1=Math.min(a.x+a.w/2,b.x+b.w/2),y0=Math.max(a.y-a.h/2,b.y-b.h/2),y1=Math.min(a.y+a.h/2,b.y+b.h/2);const i=Math.max(0,x1-x0)*Math.max(0,y1-y0);return i/(a.w*a.h+b.w*b.h-i+1e-9)}
+
+// ============ events, snapshots, labeling ============
+const events=[];
+function snapshot(t){const el=source.el,sx=source.w/PW,sy=source.h/PH,s=Math.max(48,Math.max(t.w*sx,t.h*sy)*4);const c=document.createElement("canvas");c.width=c.height=128;c.getContext("2d").drawImage(el,t.x*sx-s/2,t.y*sy-s/2,s,s,0,0,128,128);return c.toDataURL("image/jpeg",0.8)}
+function addEvent(t,now){events.unshift({id:t.id,time:new Date().toLocaleTimeString(),auto:"drone",label:"drone",conf:t.pD,img:snapshot(t),box:boxNorm(t),wing:t.flapHz});if(events.length>60)events.pop();renderEvents()}
+function boxNorm(t){return[t.x/PW,t.y/PH,Math.max(t.w,3)/PW,Math.max(t.h,3)/PH].map(v=>+v.toFixed(5))}
+function renderEvents(){
+  $("events").innerHTML=events.map((e,i)=>`<li><img src="${e.img}" alt="Snapshot of object ${e.id}"><div><div class="mono">${esc(e.time)} · #${e.id} · ${Math.round(e.conf*100)}%${e.frame?" · frame":""}</div><div>${e.frame?`${e.frame.length} object(s) in frame`:`Auto: <b>${esc(e.auto)}</b>`}</div>
+    ${e.frame?"":`<div class="lbls">${["drone","bird","other","false alarm"].map(l=>`<button type="button" data-ev="${i}" data-l="${l}" aria-pressed="${e.label===l}">${l}</button>`).join("")}</div>`}</div></li>`).join("")||`<li style="display:block;color:var(--muted)">Drone alerts and saved frames appear here.</li>`;
+}
+$("events").addEventListener("click",e=>{const b=e.target.closest("button[data-ev]");if(!b)return;events[+b.dataset.ev].label=b.dataset.l;renderEvents()});
+$("btnSnap").onclick=()=>{if(!source)return;const c=document.createElement("canvas");const sc=Math.min(1,1280/source.w);c.width=Math.round(source.w*sc);c.height=Math.round(source.h*sc);c.getContext("2d").drawImage(source.el,0,0,c.width,c.height);
+  const objs=tracks.filter(t=>t.hits>4).map(t=>({id:t.id,label:t.cls==="unknown"?"other":t.cls,box:boxNorm(t)}));events.unshift({id:0,time:new Date().toLocaleTimeString(),auto:"frame",label:"frame",conf:1,img:c.toDataURL("image/jpeg",0.85),frame:objs});renderEvents()};
+$("btnExport").onclick=async()=>{
+  const data={app:"drone-watch-live",version:1,exported:new Date().toISOString(),classes:["drone","drone_payload","bird","other"],items:events.map(e=>({time:e.time,label:e.label,auto:e.auto,confidence:+e.conf.toFixed(3),box:e.box||null,objects:e.frame||null,image_jpeg_dataurl:e.img}))};
+  const txt=JSON.stringify(data);
+  const fname=`drone-watch-labels-${Date.now()}.json`;
+  if(window.claude&&typeof window.claude.use==="function"&&window.top!==window){ // inside the Claude artifact viewer: use its download capability
+    try{const dl=await window.claude.use("downloads");if(dl){await dl.save({filename:fname,data:txt});$("expNote").textContent=`Saved ${events.length} item(s).`;return}}catch(e){}
+  }else{
+    try{const blob=new Blob([txt],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=fname;document.body.appendChild(a);a.click();a.remove();$("expNote").textContent=`Saved ${events.length} item(s).`;return}catch(e){}
+  }
+  // embedded previews block downloads: also offer the text
+  $("out").style.display="block";$("out").value=txt.length>200000?txt.slice(0,200000)+"…":txt;
+  try{await navigator.clipboard.writeText(txt);$("expNote").textContent=`Copied ${events.length} item(s) to the clipboard.`}catch(e){if(!$("expNote").textContent)$("expNote").textContent="Select the text below to copy it."}
+};
+
+// ============ main loop ============
+function loop(now){
+  requestAnimationFrame(loop);if(!source)return;now/=1000;const dt=lastT?Math.min(0.2,now-lastT):1/30;lastT=now;
+  if(paused){return}
+  if(source.kind==="demo")drawDemo(dt);
+  const el=source.el;if(source.kind!=="image"&&source.kind!=="demo"&&(el.readyState<2))return;
+  const t0=performance.now();
+  pctx.drawImage(el,0,0,PW,PH);const d=pctx.getImageData(0,0,PW,PH).data;for(let i=0;i<N;i++)gray[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+  const dets=frameDet(dt,now);frameNo++;
+  if(session&&frameNo%4===0)runModel(el);
+  updTracks(dets,dt,now,session?modelDets:[]);
+  draw(el,now);
+  const ms=performance.now()-t0;fpsE=fpsE*0.9+0.1*(1/Math.max(dt,1e-3));
+  $("hud").textContent=`${source.kind} · ${source.w}×${source.h} · ${fpsE.toFixed(0)} fps · ${ms.toFixed(0)} ms/frame${session?" · model on":""}`;
+  if(frameNo%6===0)panels(now);
+}
+function draw(el,now){
+  const c=vctx,W=view.width,H=view.height,sx=W/PW,sy=H/PH;c.drawImage(el,0,0,W,H);
+  if(S.dbg){const img=pctx.createImageData(PW,PH);for(let i=0;i<N;i++){const v=fgMask[i]?255:0;img.data[i*4]=v;img.data[i*4+1]=skyMask[i]?v:80;img.data[i*4+2]=v;img.data[i*4+3]=fgMask[i]?200:(skyMask[i]?0:60)}pctx.putImageData(img,0,0);c.drawImage(proc,0,0,W,H)}
+  for(const t of tracks){if(t.hits<4)continue;const col=t.cls==="drone"?"#ff5b52":t.cls==="bird"?"#6fd39a":"#f0a93b";
+    const bw=Math.max(18,t.w*sx*1.6),bh=Math.max(18,t.h*sy*1.6),x=t.x*sx,y=t.y*sy;
+    c.strokeStyle=col;c.lineWidth=t.cls==="drone"?2.5:1.6;c.strokeRect(x-bw/2,y-bh/2,bw,bh);
+    c.globalAlpha=0.6;c.beginPath();t.hist.forEach((h,i)=>i?c.lineTo(h.x*sx,h.y*sy):c.moveTo(h.x*sx,h.y*sy));c.stroke();c.globalAlpha=1;
+    const lab=`${t.cls==="drone"?"DRONE":t.cls==="bird"?"BIRD":"UNKNOWN"} ${Math.round(t.pD*100)}%${t.flapHz?` · wingbeat ~${(t.flapHz/2).toFixed(1)} Hz`:""}${t.feat&&t.feat.hover?" · hovering":""}${t.model?` · model: ${t.model.name} ${Math.round(t.model.conf*100)}%`:""}`;
+    c.font="600 13px "+getComputedStyle(document.body).getPropertyValue("--mono");const tw=c.measureText(lab).width+10;const ly=y-bh/2-20<2?y+bh/2+4:y-bh/2-20;
+    c.fillStyle="rgba(8,13,18,.8)";c.fillRect(x-bw/2,ly,tw,18);c.fillStyle=col;c.fillRect(x-bw/2,ly,3,18);c.fillText(lab,x-bw/2+7,ly+13)}
+  for(const m of (session?modelDets:[])){c.strokeStyle="rgba(76,194,216,.7)";c.setLineDash([4,3]);c.strokeRect((m.x-m.w/2)*sx,(m.y-m.h/2)*sy,m.w*sx,m.h*sy);c.setLineDash([])}
+}
+function panels(now){
+  const shown=tracks.filter(t=>t.hits>=4),dr=shown.filter(t=>t.cls==="drone");
+  const pill=$("pill"),banner=$("banner");
+  if(dr.some(t=>t.alerted)){pill.className="pill ALERT";pill.textContent="ALERT";$("stateTxt").textContent=`${dr.length} drone${dr.length>1?"s":""} in view`;banner.classList.add("on");$("bannerTxt").textContent=`DRONE DETECTED · ${Math.round(Math.max(...dr.map(t=>t.pD))*100)}%`;$("bannerT").textContent=new Date().toLocaleTimeString()}
+  else if(shown.some(t=>t.pD>0.5)){pill.className="pill WATCH";pill.textContent="WATCH";$("stateTxt").textContent="Possible drone";banner.classList.remove("on")}
+  else{pill.className="pill CLEAR";pill.textContent="CLEAR";$("stateTxt").textContent=shown.length?`${shown.length} object${shown.length>1?"s":""}, no drones`:"No drones in view";banner.classList.remove("on")}
+  $("nTracks").textContent=shown.length;
+  $("tbl").innerHTML=shown.slice(0,12).map(t=>`<tr><td>#${t.id}</td><td class="${t.cls}">${t.cls}</td><td>${Math.round(t.pD*100)}</td><td>${t.flapHz?"~"+(t.flapHz/2).toFixed(1)+" Hz":"none"}</td><td>${t.feat?(t.feat.hover?"hover":t.feat.straight>0.85?"straight":"erratic"):"…"}</td></tr>`).join("")||`<tr><td colspan="5" style="color:var(--muted)">Nothing tracked yet</td></tr>`;
+}
+
+// ============ wiring ============
+$("btnCam").onclick=()=>startCamera($("camSel").value||null);
+$("camSel").onchange=e=>startCamera(e.target.value);
+$("fileIn").onchange=e=>openFile(e.target.files[0]);
+$("btnDemo").onclick=startDemo;
+$("btnPause").onclick=()=>{paused=!paused;$("btnPause").textContent=paused?"Resume":"Pause";if(source&&source.kind==="video")paused?vid.pause():vid.play()};
+$("onnxIn").onchange=e=>{if(e.target.files[0])loadModel(e.target.files[0])};
+$("sens").oninput=e=>S.sens=+e.target.value;$("minpx").oninput=e=>S.minpx=+e.target.value;$("thr").oninput=e=>S.thr=e.target.value/100;$("mconf").oninput=e=>S.mconf=e.target.value/100;
+$("skyOnly").onchange=e=>{S.skyOnly=e.target.checked};$("stab").onchange=e=>{S.stab=e.target.checked};$("dbg").onchange=e=>{S.dbg=e.target.checked};
+view.addEventListener("click",e=>{ // click a box to correct its class: unknown → drone → bird → other
+  const r=view.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*PW,y=(e.clientY-r.top)/r.height*PH;const t=tracks.find(t=>Math.abs(t.x-x)<Math.max(6,t.w)&&Math.abs(t.y-y)<Math.max(6,t.h));if(!t)return;
+  const order=["drone","bird","other",null];t.user=order[(order.indexOf(t.user)+1)%order.length]});
+renderEvents();
+if("serviceWorker" in navigator&&location.protocol==="https:"&&window.top===window)navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" role="img" aria-labelledby="t d">
+  <title id="t">Airspace Control</title>
+  <desc id="d">Radar scope with a sweep line and range rings, a red drone contact inside a prison fence outline, its dashed track back to a purple pilot fix, green bird contacts, and the project title.</desc>
+  <defs>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4cc2d8" stop-opacity="0.22"/><stop offset="1" stop-color="#4cc2d8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sweep" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4cc2d8" stop-opacity="0"/><stop offset="1" stop-color="#4cc2d8" stop-opacity="0.55"/>
+    </linearGradient>
+    </defs>
+  <rect width="1280" height="360" fill="#0b1117"/>
+    <!-- radar scope -->
+  <g transform="translate(1100 180) scale(0.82)">
+    <circle r="210" fill="url(#glow)"/>
+    <g fill="none" stroke="#4cc2d8" stroke-opacity="0.35">
+      <circle r="50"/><circle r="100"/><circle r="150"/><circle r="200" stroke-opacity="0.5"/>
+      <path d="M-200 0H200M0 -200V200" stroke-opacity="0.15"/>
+    </g>
+    <path d="M0 0 L200 0 A200 200 0 0 0 141 -141 Z" fill="url(#sweep)" transform="rotate(-28)"/>
+    <line x1="0" y1="0" x2="200" y2="0" stroke="#9fe6f2" stroke-width="2" transform="rotate(-28)"/>
+    <!-- prison fence outline -->
+    <rect x="-34" y="-24" width="68" height="48" fill="none" stroke="#c9d6df" stroke-opacity="0.75" stroke-width="1.5"/>
+    <rect x="-38" y="-28" width="76" height="56" fill="none" stroke="#c9d6df" stroke-opacity="0.35"/>
+    <!-- drone contact + track -->
+    <path d="M-120 112 C-90 80 -60 55 -12 6" fill="none" stroke="#ff5b52" stroke-width="2" stroke-dasharray="4 5"/>
+    <g transform="translate(-12 6)">
+      <circle r="13" fill="none" stroke="#ff5b52" stroke-width="2.5"/>
+      <path d="M0 -7 7 0 0 7 -7 0Z" fill="#ff5b52"/>
+    </g>
+    <!-- pilot fix -->
+    <g transform="translate(-122 116)" stroke="#c58cff" stroke-width="2"><path d="M-7 0H7M0 -7V7"/><circle r="11" fill="none" stroke-dasharray="3 3"/></g>
+    <!-- bird contacts -->
+    <g fill="#6fd39a"><circle cx="96" cy="-118" r="3.5"/><circle cx="110" cy="-108" r="3"/><circle cx="-150" cy="-60" r="3.5"/><circle cx="60" cy="140" r="3"/></g>
+  </g>
+  <!-- title -->
+  <g font-family="'IBM Plex Sans Condensed','Arial Narrow',Arial,sans-serif">
+    <text x="68" y="168" fill="#eaf4fa" font-size="74" font-weight="700" letter-spacing="1">Airspace Control</text>
+    <text x="72" y="222" fill="#b4c4d1" font-size="24">Radar, RF, acoustic and camera evidence fused into one alert:</text>
+    <text x="72" y="254" fill="#b4c4d1" font-size="24">where the drone is, where the package lands, where the pilot stands.</text>
+  </g>
+  <g font-family="'JetBrains Mono',Menlo,monospace" font-size="14">
+    <rect x="72" y="290" width="132" height="26" rx="13" fill="#ff5b52"/><text x="90" y="308" fill="#1a0505" font-weight="700">ALERT · T-22</text>
+    <rect x="214" y="290" width="164" height="26" rx="13" fill="none" stroke="#4cc2d8"/><text x="230" y="308" fill="#9fe6f2">drone 99% · 64 m</text>
+    <rect x="388" y="290" width="196" height="26" rx="13" fill="none" stroke="#c58cff"/><text x="404" y="308" fill="#dcbfff">pilot fixed ±18 m</text>
+  </g>
+</svg>

@@ -1,0 +1,29 @@
+# Thermal (LWIR) detector: Anti-UAV 410/600, CST Anti-UAV, Halmstad IR, RGBT-Tiny thermal.
+# Native frames are 640x512 or smaller, so 640-960 input is enough; colour aug is meaningless.
+name: ir
+data: /data/mix_ir/data.yaml           # from build_mix.py --modality ir
+model: yolo11s.pt
+pretrained: yolo11s.pt
+epochs: 150
+patience: 30
+imgsz: 960
+batch: -1
+optimizer: auto
+cos_lr: true
+close_mosaic: 15
+mosaic: 1.0
+mixup: 0.0
+copy_paste: 0.0
+scale: 0.5
+translate: 0.1
+degrees: 0.0
+flipud: 0.0
+fliplr: 0.5
+hsv_h: 0.0
+hsv_s: 0.0
+hsv_v: 0.4
+workers: 8
+seed: 0
+cache: false
+eval_tile: 0
+export: {format: onnx, opset: 17, simplify: true, dynamic: false, half: false}

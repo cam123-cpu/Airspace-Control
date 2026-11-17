@@ -1,0 +1,14 @@
+# Pinned for the cloud training image. Versions checked on PyPI / release trackers 2026-11-16.
+ultralytics==8.3.172
+sahi==0.11.35
+onnx>=1.16,<1.21
+onnxruntime-gpu==1.20.1
+onnxslim>=0.1.36
+opencv-python-headless>=4.9,<5
+numpy>=1.26,<3
+pillow>=10.3
+pyyaml>=6.0.1
+requests>=2.32
+awscli>=1.33
+huggingface_hub>=0.24
+pytest>=8
