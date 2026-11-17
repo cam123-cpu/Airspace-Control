@@ -34,7 +34,7 @@ from .ratelimit import check
 from .rbac import Forbidden
 
 IdArg = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{6,64}$", description="Identifier as returned by another tool")]
-_CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f‪-‮⁦-⁩]")
+_CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\u202a-\u202e\u2066-\u2069]")  # bidi overrides and isolates written as escapes (no raw control characters in source)
 UNTRUSTED_FIELDS = ("title", "remote_id_text", "resolution_note")
 MAX_OUT_BYTES = 32_000
 

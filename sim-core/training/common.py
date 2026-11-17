@@ -158,7 +158,7 @@ def safe_extract(archive: Path, dest: Path, max_bytes: int = MAX_EXTRACT_BYTES) 
 
 
 def file_md5(path: Path) -> str:
-    h = hashlib.md5()  # noqa: S324 - integrity check against published checksums, not security
+    h = hashlib.md5(usedforsecurity=False)  # matches publisher-provided MD5 checksums; never used for security decisions
     with open(path, "rb") as f:
         while chunk := f.read(1 << 20):
             h.update(chunk)

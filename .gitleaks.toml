@@ -1,0 +1,12 @@
+# Extends gitleaks' default rules. The allowlist covers Python type annotations such as
+# `evidence_key: Ed25519PrivateKey | None = None`, which the generic "api key" rule misreads as secrets.
+# Real test keys are generated at runtime and never committed (see platform/tests/test_repo_secrets.py).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Type annotations that name key classes are not secrets"
+regexTarget = "line"
+regexes = [
+  '''\b\w*key\s*:\s*Ed25519(Private|Public)Key\s*\|\s*None\s*=\s*None''',
+]

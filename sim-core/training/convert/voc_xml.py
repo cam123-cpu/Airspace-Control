@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-try:  # hardened parser if available; stdlib expat >= 2.4 also blocks entity-expansion bombs
-    from defusedxml import ElementTree as ET  # type: ignore
-except ImportError:  # pragma: no cover
-    import xml.etree.ElementTree as ET  # noqa: S405
+# Downloaded annotation files are untrusted, so defusedxml is required (no silent fallback to the stdlib parser):
+# it refuses entity expansion, external entities and DTD retrieval.
+from defusedxml import DefusedXmlException
+from defusedxml import ElementTree as ET
 
 from .base import Box, SchemaError, Writer, cls_of, index_images, read_image
 
@@ -26,7 +26,7 @@ def convert(src: Path, out_root: Path, ds: dict, class_map: dict | None = None, 
             continue
         try:
             root = ET.parse(str(xp)).getroot()
-        except ET.ParseError as e:
+        except (ET.ParseError, DefusedXmlException) as e:
             raise SchemaError(f"{xp}: bad XML: {e}") from None
         if root.tag != "annotation":
             continue  # not a VOC file (e.g. a config xml); skip

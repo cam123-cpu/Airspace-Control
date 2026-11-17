@@ -14,6 +14,7 @@ from environment variables only (never argv, never logged). Every fetched file g
 """
 from __future__ import annotations
 
+import re
 import argparse
 import json
 import os
@@ -210,8 +211,11 @@ def fetch_huggingface(ds: dict, out: Path, **_) -> list[ManifestRow]:
     except ImportError:
         raise FetchError("pip install huggingface_hub, or git lfs clone "
                          f"https://huggingface.co/datasets/{ds['fetch']['repo']}") from None
+    rev = ds["fetch"].get("revision")
+    if not (isinstance(rev, str) and re.fullmatch(r"[0-9a-f]{40}", rev)):
+        raise FetchError(f"{ds['id']}: pin fetch.revision to a 40-character commit hash before downloading (supply-chain safety)")
     dest = safe_join(out, safe_name(ds["id"]))
-    p = Path(snapshot_download(repo_id=ds["fetch"]["repo"], repo_type="dataset", local_dir=str(dest)))
+    p = Path(snapshot_download(repo_id=ds["fetch"]["repo"], repo_type="dataset", revision=rev, local_dir=str(dest)))
     return [_row(ds, p, out, f"{ds['id']}/snapshot")]
 
 
