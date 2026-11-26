@@ -93,7 +93,7 @@ def test_platform_auditor_read_only_cross_tenant(env):
     from airspace import admin
     from airspace.auth import issue_access_token
     db = env.db()
-    a = admin.create_platform_auditor(env.s, db, "auditor@platform.example", "auditor password 123")
+    a = admin.create_platform_auditor(env.s, db, "auditor@platform.example", "ledger quartz meadow 71")
     db.close()
     h = {"Authorization": "Bearer " + issue_access_token(env.s, a["user_id"], None, "platform_auditor")}
     assert env.get("/api/v1/audit/verify", params={"tenant_id": env.A.id}, headers=h).json()["ok"] is True

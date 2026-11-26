@@ -1,7 +1,7 @@
 """Score a detector on the REAL-only test split built by build_mix.py.
 
-    python -m training.evaluate_real --mix /data/mix_rgb --weights runs/rgb/weights/best.pt
     python -m training.evaluate_real --mix /data/mix_rgb --onnx models/rgb.onnx
+    AIRSPACE_ALLOW_PICKLE_WEIGHTS=1 python -m training.evaluate_real --mix /data/mix_rgb --weights runs/rgb/weights/best.pt
     python -m training.evaluate_real --mix /data/mix_rgb --predictions preds.jsonl
 
 Reports AP@0.5 per class and for "any drone" (drone + drone_payload merged), recall at 90%
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 
@@ -148,6 +149,12 @@ def to_markdown(res: dict, title: str) -> str:
 
 def predict_ultralytics(weights: Path, items, imgsz: int, sahi_tile: int = 0):
     from ultralytics import YOLO  # imported lazily: not needed for --predictions / --onnx
+    # A .pt file is a pickle. Loading one runs whatever code was saved in it.
+    # Training sets this for the checkpoint it just wrote. Anything else should be ONNX.
+    if Path(weights).suffix.lower() == ".pt" and os.environ.get("AIRSPACE_ALLOW_PICKLE_WEIGHTS") != "1":
+        raise SystemExit(
+            f"refusing to unpickle {weights}: Ultralytics .pt weights execute code on load. "
+            "Pass --onnx, or set AIRSPACE_ALLOW_PICKLE_WEIGHTS=1 for a file you trained yourself.")
     model = YOLO(str(weights))
     preds = {}
     if sahi_tile:

@@ -187,7 +187,7 @@ cd platform
 pip install -r requirements-dev.txt && python -m pytest -q
 export AIRSPACE_DB_PATH=dev.db
 python -m airspace.cli bootstrap --tenant "Demo DOC" --email admin@demo.example
-uvicorn airspace.asgi:app --port 8080 --no-server-header --no-proxy-headers
+uvicorn airspace.asgi:app --port 8080 --no-server-header --no-proxy-headers --no-access-log
 bash pentest/run_all.sh
 ```
 </details>

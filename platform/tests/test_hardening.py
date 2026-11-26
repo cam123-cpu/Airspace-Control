@@ -103,3 +103,40 @@ def test_pagination_bounded(env, new_alert):
 def test_method_not_allowed(env):
     assert env.get("/api/v1/auth/login").status_code == 405
     assert requests.delete(env.base + "/api/v1/alerts", headers=env.h(env.A, "tenant_admin")).status_code == 405
+
+
+def test_duplicate_json_keys_refused(env):
+    r = env.post("/api/v1/auth/login", headers={"Content-Type": "application/json"},
+                 data='{"email":"a@a.example","email":"b@a.example","password":"xxxxxxxxxxxx"}')
+    assert r.status_code == 422
+
+
+def test_signed_telemetry_nesting_bomb_is_a_clean_4xx(env):
+    body = b"[" * 100_000 + b"]" * 100_000
+    r, _ = env.signed(env.A, "/ingest/v1/telemetry", body)       # a compromised device, validly signed
+    assert 400 <= r.status_code < 500, r.status_code
+
+
+def _raw(env, data: bytes) -> int:
+    import socket
+    from urllib.parse import urlparse
+    u = urlparse(env.base)
+    with socket.create_connection((u.hostname, u.port), timeout=5) as sk:
+        sk.sendall(data)
+        line = sk.recv(64)
+    return int(line.split(b" ", 2)[1])
+
+
+def test_oversized_and_repeated_headers_refused(env):
+    assert _raw(env, b"GET /healthz HTTP/1.1\r\nHost: x\r\nX-Big: " + b"a" * 20000 + b"\r\n\r\n") == 431
+    assert _raw(env, b"GET /healthz HTTP/1.1\r\nHost: x\r\n" + b"".join(b"X-%d: v\r\n" % i for i in range(80)) + b"\r\n") == 431
+    tok = env.h(env.A, "viewer")["Authorization"].encode()
+    assert _raw(env, b"GET /api/v1/me HTTP/1.1\r\nHost: x\r\nAuthorization: " + tok + b"\r\nAuthorization: Bearer x\r\n\r\n") == 431
+    assert _raw(env, b"GET /healthz HTTP/1.1\r\nHost: x\r\n\r\n") == 200
+
+
+def test_container_runs_without_proxy_rewriting_or_access_log():
+    from pathlib import Path
+    df = (Path(__file__).resolve().parents[1] / "ops" / "Dockerfile").read_text()
+    entry = df[df.index("ENTRYPOINT"):]
+    assert '"--no-proxy-headers"' in entry and '"--no-access-log"' in entry and '"--no-server-header"' in entry

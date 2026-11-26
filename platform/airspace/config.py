@@ -48,6 +48,8 @@ class Settings:
     evidence_key: Ed25519PrivateKey | None = None
     cors_origins: tuple[str, ...] = ()
     max_body_bytes: int = 256 * 1024
+    max_header_bytes: int = 16 * 1024
+    max_header_count: int = 64
     max_evidence_bytes: int = 5 * 1024 * 1024
     max_json_depth: int = 12
     clock_skew_s: int = 60

@@ -80,7 +80,7 @@ def build(converted: list[Path], synthetic: Path | None, out: Path, modality: st
           commercial_only: bool = False, synthetic_ratio: float = 0.3, test_frac: float = 0.15,
           val_frac: float = 0.1, max_per_sequence: int = 300, dedupe_hamming: int = 4, tile: int = 0,
           tile_overlap: float = 0.2, empty_tile_frac: float = 0.1, augment_frac: float = 0.0,
-          link: str = "copy", seed: int = 0) -> dict:
+          link: str = "copy", seed: int = 0, include_unreviewed: bool = False) -> dict:
     rng = np.random.default_rng(seed)
     cat = load_catalog()
     lic = {d["id"]: d for d in cat["datasets"]}
@@ -97,6 +97,9 @@ def build(converted: list[Path], synthetic: Path | None, out: Path, modality: st
     to_label = []
     skipped = Counter()
     for root, r in rows:
+        if r.extra.get("needs_review") and not include_unreviewed:
+            skipped["unreviewed_prelabel"] += 1       # model boxes nobody has checked (import_video.py)
+            continue
         if r.source not in lic:
             skipped["unknown_source"] += 1
             continue
@@ -278,6 +281,8 @@ def main(argv=None):
     ap.add_argument("--augment-frac", type=float, default=0.0, help="extra night/IR/blur/noise/glare copies of real train frames")
     ap.add_argument("--link", choices=["copy", "symlink", "hardlink"], default="copy")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--include-unreviewed", action="store_true",
+                    help="also train on model pre-labels nobody has checked (off by default)")
     a = ap.parse_args(argv)
     if not a.converted and not a.synthetic:
         ap.error("give at least one --converted folder or --synthetic")
@@ -285,7 +290,7 @@ def main(argv=None):
         ap.error("--synthetic-ratio must be in [0, 1)")
     rep = build(a.converted, a.synthetic, a.out, a.modality, a.commercial_only, a.synthetic_ratio, a.test_frac,
                 a.val_frac, a.max_per_sequence, a.dedupe_hamming, a.tile, a.tile_overlap, a.empty_tile_frac,
-                a.augment_frac, a.link, a.seed)
+                a.augment_frac, a.link, a.seed, a.include_unreviewed)
     print(json.dumps(rep, indent=2))
     print(f"wrote {a.out / 'data.yaml'} and {a.out / 'mix_report.md'}")
 

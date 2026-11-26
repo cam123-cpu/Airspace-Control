@@ -248,6 +248,13 @@ CREATE TABLE pow_used (                  -- single-use proof-of-work challenges 
   expires_at BIGINT NOT NULL
 );
 
+CREATE TABLE rate_buckets (              -- shared auth rate-limit buckets (hashed keys; not tenant data)
+  key_hash TEXT PRIMARY KEY CHECK (length(key_hash) = 64),
+  tokens DOUBLE PRECISION NOT NULL,
+  updated_at DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX ix_rate_buckets_updated ON rate_buckets(updated_at);
+
 -- Append-only audit log (also enforced by grants: the app role has no UPDATE/DELETE on it).
 CREATE OR REPLACE FUNCTION airspace.audit_append_only() RETURNS trigger
   LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit log is append-only'; END $$;
@@ -299,7 +306,7 @@ CREATE POLICY tenant_isolation ON nonces
 -- Grants: least privilege. The app role can't alter schema, can't touch the audit log except to append.
 -- ---------------------------------------------------------------------------------------------------------------
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, users, refresh_tokens, sites, devices, sensors, nonces, idempotency,
-  tracks, alerts, evidence, approvals, export_grants, api_tokens, confirmations, pow_used TO airspace_app;
+  tracks, alerts, evidence, approvals, export_grants, api_tokens, confirmations, pow_used, rate_buckets TO airspace_app;
 GRANT SELECT, INSERT ON audit_log TO airspace_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA airspace TO airspace_definer;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA airspace TO airspace_maintenance;

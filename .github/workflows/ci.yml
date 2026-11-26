@@ -64,3 +64,5 @@ jobs:
         with: { node-version: "22" }
       - name: Sensor physics calibration tests
         run: node apps/simulator/sensors2.test.js
+      - name: In-browser pixel classifier guards
+        run: node apps/simulator/pixelmodel.test.js

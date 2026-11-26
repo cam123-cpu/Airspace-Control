@@ -21,6 +21,9 @@ if not log.handlers:
     log.setLevel(logging.INFO)
 
 _RID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+_SINGLE_HEADERS = {b"authorization", b"content-length", b"content-type", b"transfer-encoding", b"host", b"origin",
+                   b"cookie", b"x-device-id", b"x-signature", b"x-timestamp", b"x-nonce", b"idempotency-key",
+                   b"x-csrf-token", b"x-session-mode", b"x-forwarded-proto"}
 
 SECURITY_HEADERS = [
     (b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"),
@@ -48,10 +51,22 @@ class HardeningMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+        raw_headers = scope.get("headers", [])
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in raw_headers}
         rid = headers.get("x-request-id", "")
         rid = rid if _RID.match(rid) else secrets.token_hex(8)
         scope.setdefault("state", {})["request_id"] = rid
+        # Header limits come before anything reads them. A repeated security header is refused outright: the
+        # dict above keeps the last copy, other layers (proxies, Starlette) may keep the first, and an attacker
+        # who can make two layers read two different values gets to choose which check sees which.
+        total = sum(len(k) + len(v) for k, v in raw_headers)
+        names = [k.lower() for k, _ in raw_headers]
+        dup = {n for n in names if names.count(n) > 1} & _SINGLE_HEADERS
+        if total > self.s.max_header_bytes or len(raw_headers) > self.s.max_header_count or dup:
+            body = json.dumps({"error": "header_fields_rejected", "request_id": rid}).encode()
+            await send({"type": "http.response.start", "status": 431,
+                        "headers": SECURITY_HEADERS + [(b"content-type", b"application/json"), (b"x-request-id", rid.encode())]})
+            return await send({"type": "http.response.body", "body": body})
         origin = headers.get("origin")
         allowed_origin = origin if origin and origin in self.s.cors_origins else None
         started = time.monotonic()

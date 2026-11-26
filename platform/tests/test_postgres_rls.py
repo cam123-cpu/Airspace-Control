@@ -134,7 +134,9 @@ def test_definer_lookup_works_before_tenant_is_known(pg):
 def test_every_tenant_table_has_forced_rls(pg):
     rows = pg.execute("SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class c "
                       "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'airspace' AND c.relkind = 'r'").fetchall()
-    exempt = {"pow_used"}                                           # hashes of spent challenges, no tenant data
+    # no tenant data, and both are used before login knows the tenant:
+    exempt = {"pow_used",       # hashes of spent challenges
+              "rate_buckets"}   # auth rate-limit buckets keyed by SHA-256 of bucket:key
     for name, enabled, forced in rows:
         if name not in exempt:
             assert enabled and forced, name

@@ -100,6 +100,41 @@ Coverage by context:
 - **Military-style scenes:** only MMAUD V2/V3, which the authors describe as designed for warfare simulation.
 - **Prisons, stadiums and malls:** no public dataset covers these sites at night with packages. Only your own recordings can fill that gap.
 
+## Your own footage
+
+Public datasets don't cover prisons, stadiums or malls at night, so your own recordings matter most.
+Clips go in as plain video files:
+
+```bash
+# from sim-core/; notes.csv says what is in each stretch of each clip
+python3 -m training.import_video clips/ --out /data/raw/own_footage --notes notes.csv --model models/rgb.onnx
+# fix the boxes listed in review_queue.csv (CVAT or Label Studio, YOLO format), then:
+python3 -m training.import_video --accept /data/raw/own_footage
+python3 -m training.build_mix --converted /data/raw/own_footage --converted ... --out /data/mix_rgb
+```
+
+```csv
+clip,start_s,end_s,label
+flight03.mp4,0,12.5,empty
+flight03.mp4,12.5,41,drone
+gulls_dusk.mov,0,90,bird
+```
+
+| Frame | What happens |
+|---|---|
+| In a `bird`, `empty` or `other` stretch, no model box | Trained on as a negative. You said what's in it. |
+| Model found a box | Written with that box, marked unreviewed. `build_mix.py` skips it until `--accept`. |
+| Model box inside a `bird` or `empty` stretch | Same, and listed first in the review queue: either the notes or the model is wrong. |
+| In a `drone` stretch with no box, or a clip with no notes | Review queue only. It never enters training as empty sky. |
+
+Clips are handled as untrusted input. Only video extensions are read and symlinks are skipped. File size,
+resolution and duration are capped. Output names come from a hash of the clip's content, not its file
+name, and the same clip under two names is imported once. Frames are re-encoded from pixels, so GPS and
+other container metadata are not copied. The importer cannot blur faces, so keep people out of the
+footage. Video decoding runs FFmpeg on files you didn't make: run imports inside `training/Dockerfile`.
+
+The phone app's label export has its own importer: `python3 -m training.import_liveapp export.json --out /data/raw/own_footage`.
+
 ## Pieces
 
 | File | What it does |
@@ -107,6 +142,7 @@ Coverage by context:
 | `training/datasets.yaml` | The catalog above, machine-readable. |
 | `training/fetch.py` | Downloads from Zenodo, figshare, public S3 (AOT, `--max-sequences`), Hugging Face and the Pixabay API. Downloads are resumable, checked against published md5s, rate-limited and restricted to HTTPS on allowlisted hosts. Gated sources get exact instructions instead. |
 | `training/convert/` | One converter per format: VOC XML, COCO JSON, YOLO, Drone-vs-Bird txt, OTB-style rect txt, Anti-UAV json, AOT groundtruth.json, Halmstad (via `export_halmstad_labels.m`). Each writes YOLO plus a manifest row carrying source and licence. A format mismatch stops with a clear error instead of producing empty labels. |
+| `training/import_video.py` | Plain clips to YOLO frames: samples at `--fps`, drops still frames, pre-labels with an ONNX model, and keeps unreviewed boxes out of training (see "Your own footage"). |
 | `training/convert_all.py` | Converts every raw folder present, with per-dataset defaults. |
 | `training/build_mix.py` | Mixes real and synthetic data at a set ratio. Splits **by sequence** to prevent leakage, keeps test and val **real-only**, drops near-duplicate frames (dHash plus box match), tiles 4K or AOT frames for tiny targets, adds night/IR/blur/noise/glare/JPEG variants, has a `--commercial-only` filter, and writes `mix_report.md`. |
 | `training/train.py` + `configs/` | Trains with Ultralytics YOLO11-s at 1280 px (RGB) or 960 px (IR); the P2-head variant (`--set model=yolov8s-p2.yaml`) is for targets under 16 px. Then evaluates on the real test split, exports ONNX and writes a model card. `--dry-run` prints the plan. |

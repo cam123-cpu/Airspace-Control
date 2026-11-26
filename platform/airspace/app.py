@@ -52,7 +52,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
             raise Invalid("content-type must be application/json")
         raw = await req.body()
         try:
-            data = json.loads(raw, parse_constant=_reject_constant)
+            data = json.loads(raw, parse_constant=_reject_constant, object_pairs_hook=_no_duplicate_keys)
         except (ValueError, RecursionError):
             raise Invalid("malformed JSON")
         if not isinstance(data, dict) or not json_depth_ok(data, s.max_json_depth):
@@ -306,8 +306,8 @@ def create_app(settings: Settings | None = None) -> Starlette:
             dev, site = ingest.verify_device(s, db, req.method, req.url.path + ("?" + req.url.query if req.url.query else ""), hdrs, raw)
             if req.url.path == "/ingest/v1/telemetry":
                 try:
-                    data = json.loads(raw, parse_constant=_reject_constant)
-                except ValueError:
+                    data = json.loads(raw, parse_constant=_reject_constant, object_pairs_hook=_no_duplicate_keys)
+                except (ValueError, RecursionError):
                     raise Invalid("malformed JSON")
                 if not isinstance(data, dict) or not json_depth_ok(data, s.max_json_depth):
                     raise Invalid("bad JSON")
@@ -374,6 +374,17 @@ async def _route_405(req, exc):
 
 def _reject_constant(c: str):
     raise ValueError("NaN/Infinity not allowed")
+
+
+def _no_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+    """A repeated key means two parsers can read two different requests (a proxy that keeps the first value,
+    this app that would keep the last). Refuse rather than pick one."""
+    d: dict = {}
+    for k, v in pairs:
+        if k in d:
+            raise ValueError("duplicate key")
+        d[k] = v
+    return d
 
 
 def _err(e: AppError) -> JSONResponse:

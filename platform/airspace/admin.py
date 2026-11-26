@@ -14,12 +14,14 @@ from .db import DB
 from .errors import Conflict, NotFound
 from .ingest import b64u_decode
 from .rbac import require
+from .passwords import check_password
 from .schemas import ApiTokenIn, DeviceIn, UserIn
 
 
 def create_user(s: Settings, db: DB, p: Principal, body: dict, now: int | None = None) -> dict:
     require(p, "users.manage")
     u = UserIn.model_validate(body)
+    check_password(u.password, u.email)
     now = int(now or time.time())
     uid = uuid.uuid4().hex
     secret = new_totp_secret()
@@ -76,6 +78,7 @@ def revoke_api_token(db: DB, p: Principal, token_id: str, now: int | None = None
 
 # ---------------- bootstrap (CLI only, never exposed over HTTP) ----------------
 def bootstrap_tenant(s: Settings, db: DB, tenant_name: str, admin_email: str, admin_password: str, now: int | None = None) -> dict:
+    check_password(admin_password, admin_email)
     now = int(now or time.time())
     tid, uid, secret = "tn_" + secrets.token_hex(8), uuid.uuid4().hex, new_totp_secret()
     with db.tx():
@@ -102,6 +105,7 @@ def create_site(db: DB, tenant_id: str, name: str, sensor_kinds: list[str], now:
 
 
 def create_platform_auditor(s: Settings, db: DB, email: str, password: str, now: int | None = None) -> dict:
+    check_password(password, email)
     now = int(now or time.time())
     uid, secret = uuid.uuid4().hex, new_totp_secret()
     with db.tx():

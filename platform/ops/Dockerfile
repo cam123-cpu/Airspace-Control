@@ -16,7 +16,9 @@ ENV PYTHONPATH=/usr/local/lib/python3.13/site-packages:/app \
 USER nonroot
 EXPOSE 8080
 # no Server/Date banners. uvicorn proxy-header rewriting is OFF: the app is the single place that interprets
-# X-Forwarded-For (only from AIRSPACE_TRUSTED_PROXIES peers, rightmost hop) -- pentest F2
+# X-Forwarded-For (only from AIRSPACE_TRUSTED_PROXIES peers, rightmost hop) -- pentest F2.
+# uvicorn's access log is off: it records query strings, where a misused client may put a token. The app
+# writes its own JSON request log with the path only.
 ENTRYPOINT ["python3", "-m", "uvicorn", "airspace.asgi:app", "--host", "0.0.0.0", "--port", "8080", \
-            "--no-server-header", "--no-date-header", "--no-proxy-headers", \
+            "--no-server-header", "--no-date-header", "--no-proxy-headers", "--no-access-log", \
             "--timeout-keep-alive", "5", "--limit-concurrency", "512"]

@@ -1,9 +1,23 @@
-"""Token-bucket rate limiting. In-process here; production uses the same interface backed by Redis
-(atomic Lua script) so limits hold across replicas."""
+"""Token-bucket rate limiting.
+
+Two backends share one interface:
+  * `check()`: in-process buckets for high-volume paths (API calls, ingest). Each worker enforces its own
+    copy, so the effective limit scales with the worker count. That is acceptable for throughput limits.
+  * `check_shared()`: buckets stored in the database, updated inside a write transaction, so a burst split
+    across workers or replicas still draws from one bucket. Used for the login and refresh limits, where
+    the limit is a security control (credential stuffing, MFA guessing) and traffic is low.
+Keys are hashed before storage, so the table holds no emails or IP addresses.
+"""
 from __future__ import annotations
 
+import hashlib
+import secrets
 import threading
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .db import DB
 
 
 class RateLimiter:
@@ -45,3 +59,28 @@ LIMITS = {
 def check(bucket: str, key: str) -> bool:
     rate, burst = LIMITS[bucket]
     return LIMITER.allow(f"{bucket}:{key}", rate, burst)
+
+
+SHARED_IDLE_S = 3600        # a bucket untouched this long is full again, so its row can go
+
+
+def check_shared(db: "DB", bucket: str, key: str, now: float | None = None) -> bool:
+    """Take one token from a database-backed bucket. Must not be called inside another transaction."""
+    rate, burst = LIMITS[bucket]
+    now = time.time() if now is None else now
+    kh = hashlib.sha256(f"{bucket}:{key}".encode()).hexdigest()
+    with db.tx():
+        row = db.one("SELECT tokens, updated_at FROM rate_buckets WHERE key_hash = ?", (kh,))
+        tokens = float(burst) if row is None else min(float(burst), row["tokens"] + max(0.0, now - row["updated_at"]) * rate)
+        ok = tokens >= 1.0
+        left = tokens - 1.0 if ok else tokens
+        db.x("INSERT INTO rate_buckets (key_hash, tokens, updated_at) VALUES (?, ?, ?) "
+             "ON CONFLICT (key_hash) DO UPDATE SET tokens = excluded.tokens, updated_at = excluded.updated_at",
+             (kh, left, now))
+        if secrets.randbelow(100) == 0:           # amortized cleanup keeps the table small under key flooding
+            db.x("DELETE FROM rate_buckets WHERE updated_at < ?", (now - SHARED_IDLE_S,))
+    return ok
+
+
+def reset_shared(db: "DB") -> None:
+    db.x("DELETE FROM rate_buckets")

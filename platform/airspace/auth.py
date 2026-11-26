@@ -159,7 +159,10 @@ def rotate_refresh_token(s: Settings, db: DB, raw: str, now: int | None = None) 
         raise AuthError("refresh token reuse")
     if row["expires_at"] <= now:
         raise AuthError("expired refresh token")
-    db.x("UPDATE refresh_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL", (now, row["id"]))
+    # compare-and-set: if a parallel request consumed this token between the read and here, this is reuse
+    if db.x("UPDATE refresh_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL", (now, row["id"])) != 1:
+        db.x("UPDATE refresh_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL", (now, row["family_id"]))
+        raise AuthError("refresh token reuse")
     user = db.one("SELECT id, tenant_id, role, active FROM users WHERE id = ?", (row["user_id"],))
     if not user or not user["active"]:
         raise AuthError("inactive user")

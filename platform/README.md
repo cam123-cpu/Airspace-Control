@@ -36,7 +36,7 @@ python -m pytest -q tests/                      # 160 tests (RLS tests run when 
 export AIRSPACE_DB_PATH=dev.db                  # dev mode generates ephemeral keys
 python -m airspace.cli bootstrap --tenant "Demo DOC" --email admin@demo.example
 python -m airspace.cli create-site --tenant tn_... --name "Site A"
-uvicorn airspace.asgi:app --port 8080 --no-server-header --no-proxy-headers
+uvicorn airspace.asgi:app --port 8080 --no-server-header --no-proxy-headers --no-access-log
 ```
 
 ## API
