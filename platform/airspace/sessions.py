@@ -13,17 +13,17 @@ from .config import Settings
 from .db import DB
 from .crypto import DecryptError, aad
 from .errors import ChallengeRequired, TooMany, Unauthorized
-from .ratelimit import check
+from .ratelimit import check_shared
 from .schemas import LoginIn, RefreshIn
 
 
 def login(s: Settings, db: DB, body: dict, client_ip: str, now: int | None = None) -> dict:
     now = int(now or time.time())
-    if not check("login_ip", client_ip):
+    if not check_shared(db, "login_ip", client_ip):
         raise TooMany()
     req = LoginIn.model_validate(body)
     email = req.email.lower()
-    if not check("login_account", email):
+    if not check_shared(db, "login_account", email):
         raise TooMany()
     if challenge_needed(s, email, client_ip):
         v = verifier_for(s)
@@ -51,16 +51,31 @@ def login(s: Settings, db: DB, body: dict, client_ip: str, now: int | None = Non
             secret = None                      # tampered or foreign ciphertext: fail closed
         step = verify_totp(secret, req.totp or "", u["totp_last_step"], now) if secret else None
         ok = step is not None
+    # Everything above read a snapshot taken outside the write lock. Parallel requests (other workers or
+    # replicas) share that snapshot, so each write below is a compare-and-set against the live row:
+    #   * a TOTP step is spent only if no other request spent it first (one code, one session);
+    #   * a success only lands if the account is still active and unlocked at commit time;
+    #   * a failure increments the stored counter rather than writing snapshot + 1, so no guess is lost.
     with db.tx():
+        if ok:
+            if step is not None:
+                won = db.x("UPDATE users SET failed_count = 0, locked_until = 0, totp_last_step = ? "
+                           "WHERE id = ? AND totp_last_step < ? AND locked_until <= ? AND active = 1",
+                           (step, u["id"], step, now))
+            else:
+                won = db.x("UPDATE users SET failed_count = 0, locked_until = 0 "
+                           "WHERE id = ? AND locked_until <= ? AND active = 1", (u["id"], now))
+            ok = won == 1
+            if ok:
+                refresh = issue_refresh_token(s, db, u["id"], None, now)
+                audit.append(db, u["tenant_id"], f"user:{u['id']}", "login.ok", u["id"], {"ip": client_ip}, now)
         if not ok:
-            fails = u["failed_count"] + 1
+            fails = db.one("UPDATE users SET failed_count = failed_count + 1 WHERE id = ? RETURNING failed_count",
+                           (u["id"],))["failed_count"]
             lock = now + min(3600, 60 * 2 ** (fails - s.lockout_threshold)) if fails >= s.lockout_threshold else 0
-            db.x("UPDATE users SET failed_count = ?, locked_until = ? WHERE id = ?", (fails, lock, u["id"]))
+            if lock:
+                db.x("UPDATE users SET locked_until = ? WHERE id = ? AND locked_until < ?", (lock, u["id"], lock))
             audit.append(db, u["tenant_id"], f"user:{u['id']}", "login.failed", u["id"], {"ip": client_ip, "fails": fails, "locked": bool(lock)}, now)
-        else:
-            db.x("UPDATE users SET failed_count = 0, locked_until = 0, totp_last_step = ? WHERE id = ?", (step or u["totp_last_step"], u["id"]))
-            refresh = issue_refresh_token(s, db, u["id"], None, now)
-            audit.append(db, u["tenant_id"], f"user:{u['id']}", "login.ok", u["id"], {"ip": client_ip}, now)
     if not ok:
         record_failure(email, client_ip)
         raise Unauthorized()
@@ -71,7 +86,7 @@ def login(s: Settings, db: DB, body: dict, client_ip: str, now: int | None = Non
 
 def refresh(s: Settings, db: DB, body: dict, client_ip: str, now: int | None = None) -> dict:
     now = int(now or time.time())
-    if not check("refresh_ip", client_ip):
+    if not check_shared(db, "refresh_ip", client_ip):
         raise TooMany()
     req = RefreshIn.model_validate(body)
     try:

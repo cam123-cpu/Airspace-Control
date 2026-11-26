@@ -128,6 +128,7 @@ def env(tmp_path_factory):
     s.current_kid = "k1"
     s.evidence_key = Ed25519PrivateKey.generate()
     migrate(s.db_path)
+    _install_shared_reset(s.db_path)
     db = DB(s.db_path)
     A = _make_tenant(s, db, "Tenant A", "a")
     B = _make_tenant(s, db, "Tenant B", "b")
@@ -143,6 +144,21 @@ def env(tmp_path_factory):
     yield Env(s, f"http://127.0.0.1:{port}", A, B)
     server.should_exit = True
     th.join(timeout=5)
+
+
+def _install_shared_reset(db_path: str) -> None:
+    """Tests call LIMITER.reset() to start from full buckets; make that clear the shared (DB) buckets too."""
+    from airspace.ratelimit import RateLimiter, reset_shared
+    local_reset = RateLimiter.reset
+
+    def reset_both(self):
+        local_reset(self)
+        d = DB(db_path)
+        try:
+            reset_shared(d)
+        finally:
+            d.close()
+    LIMITER.reset = reset_both.__get__(LIMITER)
 
 
 @pytest.fixture(autouse=True)

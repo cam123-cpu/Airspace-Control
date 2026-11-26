@@ -207,6 +207,14 @@ CREATE TABLE pow_used (
   expires_at INTEGER NOT NULL
 );
 """),
+    (3, """
+CREATE TABLE rate_buckets (                -- shared token buckets for auth limits; keys are SHA-256 hashes
+  key_hash TEXT PRIMARY KEY CHECK (length(key_hash) = 64),
+  tokens REAL NOT NULL,
+  updated_at REAL NOT NULL
+);
+CREATE INDEX ix_rate_buckets_updated ON rate_buckets(updated_at);
+"""),
 ]
 
 
